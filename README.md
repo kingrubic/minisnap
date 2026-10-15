@@ -36,6 +36,18 @@ Get the latest build from **[Releases](https://github.com/kingrubic/minisnap/rel
 - **Windows 10/11:** `MiniSnap-Setup.exe` — per-user install, no admin rights. The installer is not code-signed yet, so SmartScreen may warn: click *More info → Run anyway*.
 - **macOS 14+:** `MiniSnap-macOS.zip` — unzip, then right-click `MiniSnap.app` → *Open* the first time (the app is not notarized). Grant *Screen Recording* (and *Accessibility* for scrolling capture) when asked.
 
+See the [Code signing policy](#code-signing-policy) and the [Privacy policy](PRIVACY.md).
+
+## Code signing policy
+
+Free code signing provided by [SignPath.io](https://signpath.io), certificate by [SignPath Foundation](https://signpath.org).
+
+- Windows binaries (`MiniSnap.exe`, `MiniSnap-Setup.exe`) are built from this repository by GitHub Actions ([build.yml](.github/workflows/build.yml)) and only releases built that way are signed. Releases published before signing was set up are unsigned.
+- Team roles:
+  - **Committers and reviewers:** [@kingrubic](https://github.com/kingrubic) (Nguyễn Năng Quốc Bảo)
+  - **Approvers:** [@kingrubic](https://github.com/kingrubic) (Nguyễn Năng Quốc Bảo) — every release is approved manually before it is signed.
+- Privacy: this program will not transfer any information to other networked systems unless specifically requested by the user or the person installing or operating it, except the optional daily update check described in the [Privacy policy](PRIVACY.md), which can be turned off.
+
 ## Default shortcuts
 
 | Action | Windows | macOS |

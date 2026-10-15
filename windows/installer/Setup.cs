@@ -13,8 +13,8 @@ using Microsoft.Win32;
 [assembly: AssemblyTitle("Cài đặt MiniSnap")]
 [assembly: AssemblyProduct("MiniSnap")]
 [assembly: AssemblyCompany("Nguyễn Năng Quốc Bảo")]
-[assembly: AssemblyVersion("1.5.0.0")]
-[assembly: AssemblyFileVersion("1.5.0.0")]
+[assembly: AssemblyVersion("1.5.1.0")]
+[assembly: AssemblyFileVersion("1.5.1.0")]
 
 namespace MiniSnap.Setup
 {
@@ -23,7 +23,7 @@ namespace MiniSnap.Setup
     static class SetupProgram
     {
         public const string AppName = "MiniSnap";
-        public const string Version = "1.5.0";
+        public const string Version = "1.5.1";
         public const string UninstallKey = @"Software\Microsoft\Windows\CurrentVersion\Uninstall\MiniSnap";
         public const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
 
@@ -75,6 +75,13 @@ namespace MiniSnap.Setup
                 return k == null ? null : k.GetValue("DisplayVersion") as string;
         }
 
+        // Keep the user's earlier choice when updating; on by default.
+        public static bool AutoUpdateDefault()
+        {
+            using (var k = Registry.CurrentUser.OpenSubKey(@"Software\MiniSnap"))
+                return k == null || !(k.GetValue("AutoUpdateCheck") is int) || (int)k.GetValue("AutoUpdateCheck") != 0;
+        }
+
         public static Process[] RunningInstances()
         {
             return Process.GetProcessesByName(SetupProgram.AppName);
@@ -112,7 +119,7 @@ namespace MiniSnap.Setup
             finally { Marshal.FinalReleaseComObject(shell); }
         }
 
-        public static void Install(string folder, bool desktop, bool startup, Action<int, string> progress)
+        public static void Install(string folder, bool desktop, bool startup, bool? autoUpdate, Action<int, string> progress)
         {
             progress(10, L.T("Đang tạo thư mục cài đặt..."));
             Directory.CreateDirectory(folder);
@@ -157,6 +164,9 @@ namespace MiniSnap.Setup
                 if (startup) k.SetValue("MiniSnap", "\"" + exe + "\" --startup");
                 else k.DeleteValue("MiniSnap", false);
             }
+            if (autoUpdate.HasValue)
+                using (var k = Registry.CurrentUser.CreateSubKey(@"Software\MiniSnap"))
+                    k.SetValue("AutoUpdateCheck", autoUpdate.Value ? 1 : 0, RegistryValueKind.DWord);
             progress(100, L.T("Hoàn tất."));
         }
 
@@ -177,7 +187,7 @@ namespace MiniSnap.Setup
                 try { p.Kill(); p.WaitForExit(5000); }
                 catch (Exception) { }
             }
-            try { Install(folder, desktop, startup, (pct, msg) => { }); }
+            try { Install(folder, desktop, startup, null, (pct, msg) => { }); }
             catch (Exception ex)
             {
                 MessageBox.Show(L.T("Cập nhật không thành công:\n") + ex.Message, L.T("Cài đặt MiniSnap"), MessageBoxButtons.OK, MessageBoxIcon.Error);
@@ -225,7 +235,7 @@ namespace MiniSnap.Setup
         readonly Panel welcomePage, optionsPage, progressPage, finishPage;
         readonly Button backBtn, nextBtn, cancelBtn;
         readonly TextBox folderBox;
-        readonly CheckBox desktopBox, startupBox, launchBox;
+        readonly CheckBox desktopBox, startupBox, updateBox, launchBox;
         readonly ProgressBar progress;
         readonly Label progressLabel, headerTitle, headerSub;
         readonly Image logo;
@@ -302,7 +312,9 @@ namespace MiniSnap.Setup
             startupBox = new CheckBox { Text = L.T("Tự chạy MiniSnap khi khởi động Windows (để luôn bấm được PrtScn)"), Checked = true, AutoSize = true, Location = new Point(0, S(136)) };
             optionsPage.Controls.Add(desktopBox);
             optionsPage.Controls.Add(startupBox);
-            AddText(optionsPage, L.T("Lối tắt trong Start menu luôn được tạo. Gỡ cài đặt trong Settings → Apps."), S(180), false).ForeColor = Theme.TextSecondary;
+            updateBox = new CheckBox { Text = L.T("Tự kiểm tra bản mới mỗi ngày (chỉ gửi một yêu cầu tới api.github.com — xem PRIVACY.md)"), Checked = Installer.AutoUpdateDefault(), AutoSize = false, Size = new Size(S(545), S(42)), CheckAlign = ContentAlignment.TopLeft, TextAlign = ContentAlignment.TopLeft, Location = new Point(0, S(166)) };
+            optionsPage.Controls.Add(updateBox);
+            AddText(optionsPage, L.T("Lối tắt trong Start menu luôn được tạo. Gỡ cài đặt trong Settings → Apps."), S(222), false).ForeColor = Theme.TextSecondary;
 
             // Progress
             progressPage = NewPage();
@@ -417,7 +429,7 @@ namespace MiniSnap.Setup
             Refresh();
             try
             {
-                Installer.Install(folder, desktopBox.Checked, startupBox.Checked, (pct, msg) =>
+                Installer.Install(folder, desktopBox.Checked, startupBox.Checked, updateBox.Checked, (pct, msg) =>
                 {
                     progress.Value = pct;
                     progressLabel.Text = msg;

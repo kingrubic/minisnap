@@ -240,6 +240,30 @@ namespace MiniSnap
         }
     }
 
+    static class AutoUpdatePref
+    {
+        const string RegPath = @"Software\MiniSnap";
+
+        // Daily background check against api.github.com (default on; documented in PRIVACY.md).
+        public static bool Enabled
+        {
+            get
+            {
+                try
+                {
+                    using (var k = Registry.CurrentUser.OpenSubKey(RegPath))
+                        return k == null || !(k.GetValue("AutoUpdateCheck") is int) || (int)k.GetValue("AutoUpdateCheck") != 0;
+                }
+                catch (Exception) { return true; }
+            }
+            set
+            {
+                using (var k = Registry.CurrentUser.CreateSubKey(RegPath))
+                    k.SetValue("AutoUpdateCheck", value ? 1 : 0, RegistryValueKind.DWord);
+            }
+        }
+    }
+
     static class Startup
     {
         const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
@@ -269,7 +293,7 @@ namespace MiniSnap
         readonly NotifyIcon tray;
         readonly HotkeyWindow hotkeys;
         readonly List<Form> windows = new List<Form>();
-        ToolStripMenuItem recordItem, startupItem, askItem;
+        ToolStripMenuItem recordItem, startupItem, askItem, autoUpdateItem;
         readonly Dictionary<HotkeyAction, ToolStripMenuItem> actionItems = new Dictionary<HotkeyAction, ToolStripMenuItem>();
         Dictionary<HotkeyAction, Hotkey> keys = HotkeySettings.Load();
         LibraryForm library;
@@ -338,6 +362,11 @@ namespace MiniSnap
             });
             startupItem = AddItem(menu, L.T("Khởi động cùng Windows"), null, null, (s, e) => ToggleStartup());
             AddItem(menu, L.T("Kiểm tra cập nhật..."), null, IconKind.Update, (s, e) => ShowUpdate(null));
+            autoUpdateItem = AddItem(menu, L.T("Tự kiểm tra cập nhật hằng ngày"), null, null, (s, e) =>
+            {
+                try { AutoUpdatePref.Enabled = !AutoUpdatePref.Enabled; }
+                catch (Exception ex) { MessageBox.Show(ex.Message, "MiniSnap"); }
+            });
             AddItem(menu, L.T("Giới thiệu MiniSnap..."), null, IconKind.Info, (s, e) => ShowAbout());
             AddItem(menu, L.T("Thoát MiniSnap"), null, null, (s, e) => ExitThread());
             Theme.StyleStrip(menu);
@@ -346,6 +375,7 @@ namespace MiniSnap
             {
                 startupItem.Checked = Startup.Enabled;
                 askItem.Checked = Prefs.AskAfterSelect;
+                autoUpdateItem.Checked = AutoUpdatePref.Enabled;
                 recordItem.Text = recorder != null ? L.T("Dừng quay video") : L.T("Quay video màn hình");
                 foreach (var kv in actionItems) kv.Value.ShortcutKeyDisplayString = keys[kv.Key].ShortText;
             };
@@ -458,7 +488,7 @@ namespace MiniSnap
         // Quiet daily check a few seconds after start; only a balloon if something newer exists.
         void ScheduleAutoUpdateCheck()
         {
-            if (!Updater.DueForAutoCheck()) return;
+            if (!AutoUpdatePref.Enabled || !Updater.DueForAutoCheck()) return;
             invoker = new Control();
             invoker.CreateControl();
             var t = new System.Windows.Forms.Timer { Interval = 15000 };
@@ -971,7 +1001,14 @@ namespace MiniSnap
             try
             {
                 var latest = Updater.Fetch();
-                Log(dir, "update fetch: " + (latest == null ? "no releases (404)" : latest.Tag + " setup=" + (latest.SetupUrl != null) + " sha=" + (latest.Sha256 != null)));
+                Log(dir, "update fetch: " + (latest == null ? "no releases (404)" : latest.Tag + " setup=" + (latest.SetupUrl != null) + " sha=" + (latest.Sha256 != null) + " newer=" + Updater.IsNewer(latest)));
+                if (latest != null && latest.SetupUrl != null)
+                {
+                    // Real download of the published installer, including the SHA-256 check.
+                    string got = Updater.Download(latest, p => { }, () => false);
+                    Log(dir, "update download ok: " + new FileInfo(got).Length + " bytes, sha verified=" + (latest.Sha256 != null));
+                    File.Delete(got);
+                }
             }
             catch (Exception ex) { Log(dir, "update fetch FAILED: " + ex.Message); }
             var cur = Updater.Current;

@@ -70,6 +70,8 @@ namespace MiniSnap
             root.Controls.Add(email, 1, root.RowCount++);
             var repo = MakeLink(L.T("Mã nguồn: "), AppInfo.Repo.Replace("https://", ""), AppInfo.Repo, S);
             root.Controls.Add(repo, 1, root.RowCount++);
+            var privacy = MakeLink(L.T("Quyền riêng tư: "), L.T("MiniSnap không thu thập dữ liệu"), AppInfo.Repo + "/blob/main/PRIVACY.md", S);
+            root.Controls.Add(privacy, 1, root.RowCount++);
             add(L.T("Giấy phép MIT — miễn phí, mã nguồn mở"), Font, Theme.TextSecondary, S(4));
 
             var buttons = new FlowLayoutPanel { AutoSize = true, FlowDirection = FlowDirection.LeftToRight, Margin = new Padding(0, S(18), 0, 0), WrapContents = false };

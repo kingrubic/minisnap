@@ -262,6 +262,11 @@ namespace MiniSnap
             { "Bạn đang dùng phiên bản ", "You're now on version " },
             { "Cập nhật không thành công:\n", "The update failed:\n" },
 
+            { "Tự kiểm tra cập nhật hằng ngày", "Check for updates daily" },
+            { "Tự kiểm tra bản mới mỗi ngày (chỉ gửi một yêu cầu tới api.github.com — xem PRIVACY.md)", "Check for new versions daily (sends only one request to api.github.com — see PRIVACY.md)" },
+            { "Quyền riêng tư: ", "Privacy: " },
+            { "MiniSnap không thu thập dữ liệu", "MiniSnap collects no data" },
+
             // Post-selection mode bar
             { "Chụp ảnh (Enter)", "Screenshot (Enter)" },
             { "Quay video (V)", "Record video (V)" },
