@@ -39,21 +39,24 @@ final class ScrollStitcher {
         let x1 = max(x0 + 1, w - min(28, w / 4))
         var hashes = [UInt64](repeating: 0, count: h)
         var uniform = [Bool](repeating: false, count: h)
-        let p = px.pixels
-        for y in 0..<h {
-            let o = y * w
-            var hash: UInt64 = 1_469_598_103_934_665_603
-            let first = p[o + x0] & 0x00FF_FFFF
-            var uni = true
-            var x = x0
-            while x < x1 {
-                let v = p[o + x] & 0x00FF_FFFF
-                if v != first { uni = false }
-                hash = (hash ^ UInt64(v)) &* 1_099_511_628_211
-                x += 1
+        // `pixels` points into memory owned by `px`, so keep `px` alive while reading it.
+        withExtendedLifetime(px) {
+            let p = px.pixels
+            for y in 0..<h {
+                let o = y * w
+                var hash: UInt64 = 1_469_598_103_934_665_603
+                let first = p[o + x0] & 0x00FF_FFFF
+                var uni = true
+                var x = x0
+                while x < x1 {
+                    let v = p[o + x] & 0x00FF_FFFF
+                    if v != first { uni = false }
+                    hash = (hash ^ UInt64(v)) &* 1_099_511_628_211
+                    x += 1
+                }
+                hashes[y] = hash
+                uniform[y] = uni
             }
-            hashes[y] = hash
-            uniform[y] = uni
         }
         return Rows(hash: hashes, uniform: uniform)
     }

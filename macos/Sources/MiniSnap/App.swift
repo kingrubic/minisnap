@@ -10,9 +10,8 @@ enum MiniSnapMain {
             let delegate = AppDelegate()
             app.delegate = delegate
             app.setActivationPolicy(.accessory)
-            // `delegate` stays alive because run() only returns when the app quits.
-            app.run()
-            _ = delegate
+            // NSApplication.delegate is weak: keep ours alive for as long as the app runs.
+            withExtendedLifetime(delegate) { app.run() }
         }
     }
 }

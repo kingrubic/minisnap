@@ -259,6 +259,7 @@ final class RecordingController: NSObject {
     private var recorder: ScreenRecorder?
     private var ticker: Task<Void, Never>?
     private var stopping = false
+    private var starting = false
     private var finished = false
 
     var isActive: Bool { !finished }
@@ -307,14 +308,23 @@ final class RecordingController: NSObject {
             MainActor.assumeIsolated { self?.stopRecording() }
         }
         recorder = rec
+        // While start() is running, a Stop press only flags `stopping`; we clean up here once it returns,
+        // so the stream can never be left running.
+        starting = true
         do {
             try await rec.start()
         } catch {
+            starting = false
             recorder = nil
             done(nil, error)
             return
         }
-        if stopping { return }
+        starting = false
+        if stopping {
+            let err = await rec.stop()
+            done(err == nil ? rec.url : nil, err)
+            return
+        }
         pauseButton.isEnabled = true
         ticker = Task { [weak self] in
             while !Task.isCancelled {
@@ -353,6 +363,12 @@ final class RecordingController: NSObject {
         if stopping { return }
         stopping = true
         ticker?.cancel()
+        if starting {
+            timeLabel.stringValue = L.t("Đang lưu video...")
+            pauseButton.isEnabled = false
+            stopButton.isEnabled = false
+            return // beginRecording() finishes the stop once start() returns
+        }
         guard let r = recorder else {
             done(nil, nil)
             return
