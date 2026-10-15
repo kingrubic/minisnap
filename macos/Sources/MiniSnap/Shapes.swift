@@ -335,7 +335,8 @@ final class TextShape: Shape {
 
     var textSize: CGSize {
         let s = attributed(fill: true).boundingRect(with: CGSize(width: 100_000, height: 100_000),
-                                                    options: [.usesLineFragmentOrigin, .usesFontLeading]).size
+                                                    options: [.usesLineFragmentOrigin, .usesFontLeading],
+                                                    context: nil).size
         return CGSize(width: ceil(s.width), height: ceil(s.height))
     }
 

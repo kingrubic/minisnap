@@ -29,6 +29,7 @@ enum CaptureError: LocalizedError {
 }
 
 enum ScreenCapture {
+    @MainActor
     static func screenNumber(_ screen: NSScreen) -> CGDirectDisplayID? {
         let key = NSDeviceDescriptionKey("NSScreenNumber")
         if let n = screen.deviceDescription[key] as? NSNumber { return n.uint32Value }

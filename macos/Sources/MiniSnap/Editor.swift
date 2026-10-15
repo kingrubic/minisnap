@@ -323,7 +323,7 @@ final class EditorController: NSObject, NSWindowDelegate {
         customSwatch.isChosen = false
         let more = NSButton(title: L.t("Khác..."), target: self, action: #selector(morePressed))
         more.toolTip = L.t("Chọn màu khác")
-        more.bezelStyle = .rounded
+        more.bezelStyle = .push
         more.controlSize = .small
         customSwatch.target = self
         customSwatch.action = #selector(morePressed)
@@ -681,7 +681,7 @@ final class EditorController: NSObject, NSWindowDelegate {
         tv.textContainerInset = NSSize(width: 4, height: 4)
         tv.textContainer?.lineFragmentPadding = 0
         tv.textContainer?.widthTracksTextView = false
-        tv.textContainer?.containerSize = NSSize(width: 100_000, height: 100_000)
+        tv.textContainer?.size = NSSize(width: 100_000, height: 100_000)
         tv.isHorizontallyResizable = true
         tv.isVerticallyResizable = true
         tv.onCommit = { [weak self] in self?.commitText() }

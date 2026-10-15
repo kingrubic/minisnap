@@ -41,9 +41,8 @@ enum OcrService {
         try handler.perform([request])
 
         var lines: [(y: CGFloat, x: CGFloat, text: String)] = []
-        for obs in request.results ?? [] {
-            guard let o = obs as? VNRecognizedTextObservation,
-                  let best = o.topCandidates(1).first else { continue }
+        for o in request.results ?? [] {
+            guard let best = o.topCandidates(1).first else { continue }
             lines.append((o.boundingBox.midY, o.boundingBox.minX, best.string))
         }
         // Vision boxes are normalised with a bottom-left origin: read top to bottom, left to right.
