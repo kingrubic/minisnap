@@ -1,0 +1,61 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build app and installer
+        shell: pwsh
+        run: ./windows/build.ps1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MiniSnap-Windows
+          path: |
+            windows/bin/MiniSnap-Setup.exe
+            windows/bin/MiniSnap.exe
+
+  macos:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check for macOS sources
+        id: src
+        shell: bash
+        run: |
+          if [ -f macos/build.sh ]; then echo "present=true" >> "$GITHUB_OUTPUT"; else echo "present=false" >> "$GITHUB_OUTPUT"; echo "No macOS sources yet - skipping."; fi
+      - name: Build MiniSnap.app
+        if: steps.src.outputs.present == 'true'
+        run: bash macos/build.sh
+      - uses: actions/upload-artifact@v4
+        if: steps.src.outputs.present == 'true'
+        with:
+          name: MiniSnap-macOS
+          path: macos/dist/MiniSnap-macOS.zip
+
+  # Pushing a tag such as v1.5.0 publishes a GitHub Release with the downloads that were built.
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [windows, macos]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+      - uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          fail_on_unmatched_files: false
+          files: |
+            dist/MiniSnap-Windows/MiniSnap-Setup.exe
+            dist/MiniSnap-macOS/MiniSnap-macOS.zip

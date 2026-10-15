@@ -1,0 +1,19 @@
+# Windows build output
+windows/bin/
+windows/obj/
+
+# macOS build output
+macos/.build/
+macos/dist/
+.swiftpm/
+*.xcodeproj/
+xcuserdata/
+DerivedData/
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+desktop.ini
+.vs/
+.vscode/
+*.user
