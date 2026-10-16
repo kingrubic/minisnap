@@ -1,6 +1,6 @@
 """Row-matching stitcher for scrolling capture (exact port of ScrollStitcher in
 windows/src/ScrollCapture.cs). Kept free of UI so it can be tested on synthetic frames.
-Phase 2 drives it with real scrolling; phase 1 ships it with the self-test.
+scrollcapture.py drives it with real scrolling; the self-test with a synthetic page.
 
 Frames are opaque cairo ImageSurfaces (FORMAT_ARGB32) of identical size.
 """

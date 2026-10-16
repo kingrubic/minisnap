@@ -10,6 +10,11 @@ IMAGE_EXTS = (".png", ".jpg", ".jpeg", ".bmp", ".gif", ".webp")
 VIDEO_EXTS = (".mp4", ".webm", ".mkv")
 
 
+def in_flatpak():
+    """True inside the Flatpak sandbox (Flathub delivers the updates there)."""
+    return bool(os.environ.get("FLATPAK_ID")) or os.path.exists("/.flatpak-info")
+
+
 def _ensure(kind):
     # MINISNAP_LIBRARY redirects the library (used by --selftest so it never touches real captures).
     over = os.environ.get("MINISNAP_LIBRARY")

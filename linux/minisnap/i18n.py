@@ -219,6 +219,43 @@ EN = {
     "Không tìm thấy bộ mã hoá video. Hãy cài: sudo apt install gstreamer1.0-plugins-ugly":
         "No video encoder found. Install one: sudo apt install gstreamer1.0-plugins-ugly",
     "Không bắt đầu quay được (GStreamer).": "Could not start recording (GStreamer).",
+    "Chọn vùng có nội dung cần cuộn, MiniSnap sẽ tự cuộn xuống và ghép thành một ảnh dài":
+        "Select the area to scroll; MiniSnap scrolls it for you and stitches one long image",
+    "Chụp cuộn: kéo chọn vùng có nội dung cần cuộn — MiniSnap sẽ tự cuộn xuống":
+        "Scrolling capture: drag over the area to scroll — MiniSnap scrolls it for you",
+    "Không chụp cuộn được": "Couldn't take a scrolling capture",
+    "Chụp cuộn cần cổng RemoteDesktop của xdg-desktop-portal để tự cuộn trang thay bạn. Hãy cài xdg-desktop-portal-gnome hoặc xdg-desktop-portal-kde bản có RemoteDesktop (GNOME 40, KDE Plasma 5.27 trở lên đều có; xdg-desktop-portal-wlr thì chưa), rồi đăng xuất và đăng nhập lại. Phiên X11 cũng dùng cùng cổng này.":
+        "Scrolling capture needs the RemoteDesktop interface of xdg-desktop-portal to scroll the page for you. "
+        "Install xdg-desktop-portal-gnome or xdg-desktop-portal-kde with RemoteDesktop support (GNOME 40 and "
+        "KDE Plasma 5.27 or newer have it; xdg-desktop-portal-wlr does not yet), then log out and back in. "
+        "X11 sessions use the same portal.",
+    "Chụp cuộn cần GStreamer với các gói gstreamer1.0-pipewire và gstreamer1.0-plugins-base. Thiếu: ":
+        "Scrolling capture needs GStreamer with the gstreamer1.0-pipewire and gstreamer1.0-plugins-base packages. Missing: ",
+    "Chụp cuộn bị lỗi:\n": "Scrolling capture failed:\n",
+    "Không nhận được hình ảnh nào từ màn hình. Hãy thử lại.": "No image arrived from the screen. Please try again.",
+    "Hệ thống không cho MiniSnap điều khiển chuột nên không tự cuộn trang được.":
+        "The system did not allow MiniSnap to control the pointer, so it cannot scroll the page.",
+    "Không đọc được hình ảnh màn hình (GStreamer).": "Could not read the screen image (GStreamer).",
+    "Vùng đã chọn không nằm trên màn hình được chia sẻ. Hãy thử lại và chọn đúng màn hình.":
+        "The selected area is not on the shared screen. Try again and choose that screen.",
+
+    # Global shortcuts (GlobalShortcuts portal)
+    "Bật phím tắt toàn cục": "Enable global shortcuts",
+    "MiniSnap chạy nền": "MiniSnap runs in the background",
+    "MiniSnap sẽ tiếp tục chạy nền để nhận phím tắt toàn cục, kể cả khi bạn đóng cửa sổ. Tắt trong menu ☰ → Bật phím tắt toàn cục.":
+        "MiniSnap keeps running in the background to receive global shortcuts, even when you close its window. "
+        "Turn it off in the ☰ menu → Enable global shortcuts.",
+    "Phím tắt toàn cục (hệ thống hỗ trợ)": "Global shortcuts (supported by your desktop)",
+    "Desktop của bạn cho phép MiniSnap tự đăng ký phím tắt. Hệ thống sẽ mở hộp thoại riêng để bạn xác nhận hoặc đổi phím; MiniSnap chạy nền để nhận phím tắt.":
+        "Your desktop lets MiniSnap register its own shortcuts. The system opens its own dialog where you confirm "
+        "or change the keys; MiniSnap runs in the background to receive them.",
+    "Đăng ký / Đổi phím…": "Register / Change keys…",
+    "Hệ thống báo lỗi: ": "The system reported an error: ",
+    "Đang bật. Phím tắt hiển thị ở trên là phím hệ thống đã gán.":
+        "On. The keys shown above are the ones the system assigned.",
+    "Chưa bật. Bấm Đăng ký / Đổi phím… để bật.": "Off. Click Register / Change keys… to turn them on.",
+    "Cách khác: phím tắt tự tạo trong Cài đặt (GNOME 46 / Ubuntu 24.04)":
+        "Alternative: custom shortcuts in Settings (GNOME 46 / Ubuntu 24.04)",
 
     # Keyboard shortcuts help
     "Phím tắt bàn phím — MiniSnap": "Keyboard shortcuts — MiniSnap",

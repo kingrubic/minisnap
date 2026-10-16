@@ -336,6 +336,8 @@ class CaptureOverlay:
                 self.finish(IMAGE)
             elif k == Gdk.KEY_v:
                 self.finish(VIDEO)
+            elif k == Gdk.KEY_s:
+                self.finish(SCROLL)
             elif k in (Gdk.KEY_r, Gdk.KEY_BackSpace):
                 self.reselect()
             elif k in (Gdk.KEY_Left, Gdk.KEY_Right, Gdk.KEY_Up, Gdk.KEY_Down):
@@ -344,7 +346,7 @@ class CaptureOverlay:
                 dy = -step if k == Gdk.KEY_Up else step if k == Gdk.KEY_Down else 0
                 self.set_selection((x + dx, y + dy, w, h))
             else:
-                return False   # S (scrolling capture) arrives in phase 2
+                return False
             return True
         if k == Gdk.KEY_Escape:
             self.cancel()
@@ -522,9 +524,7 @@ class MonitorView(Gtk.Window):
         bar.add_css_class("ms-modebar")
         bar.append(self._bar_button("camera", "ms-bar-blue", L.t("Chụp ảnh (Enter)"), lambda: ctl.finish(IMAGE)))
         bar.append(self._bar_button("video", "ms-bar-blue", L.t("Quay video (V)"), lambda: ctl.finish(VIDEO)))
-        # Scrolling capture needs synthetic scrolling, which arrives in phase 2.
-        scroll = self._bar_button("scroll", "ms-bar-blue", L.t("Chụp cuộn sẽ có ở bản sau"), lambda: None, sensitive=False)
-        bar.append(scroll)
+        bar.append(self._bar_button("scroll", "ms-bar-blue", L.t("Chụp cuộn (S)"), lambda: ctl.finish(SCROLL)))
         self.width_entry = self._size_entry(L.t("Rộng (px) — nhập rồi nhấn Enter"))
         self.height_entry = self._size_entry(L.t("Cao (px) — nhập rồi nhấn Enter"))
         self.width_entry.set_margin_start(14)

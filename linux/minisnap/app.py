@@ -1,6 +1,8 @@
 """The application: single instance, command line, launcher window and the capture flow
-(TrayApp in windows/src/Program.cs). There is no tray icon in phase 1: the launcher window plays
-that role, and desktop shortcuts run `minisnap --capture region` etc. on the running instance.
+(TrayApp in windows/src/Program.cs). There is no tray icon: the launcher window plays that role,
+and desktop shortcuts run `minisnap --capture region` etc. on the running instance. Where the
+GlobalShortcuts portal exists, MiniSnap can bind real global shortcuts and keep running in the
+background (globalshortcuts.py).
 """
 
 import os
@@ -15,7 +17,8 @@ from .i18n import L
 USAGE = """Usage: minisnap [OPTION] [IMAGE...]
 
   --capture region|full|delayed|window   take a screenshot
-  --record                               record the screen (again: stop recording)
+  --capture scroll                       scrolling capture of a long page
+  --record                              record the screen (again: stop recording)
   --ocr                                  capture an area and extract its text
   --library                              open the image & video library
   --about                                show the About window
@@ -38,8 +41,8 @@ def parse_args(args):
             else:
                 i += 1
                 value = args[i] if i < len(args) else "region"
-            if value not in ("region", "full", "delayed", "window"):
-                raise ValueError("--capture expects region, full, delayed or window")
+            if value not in ("region", "full", "delayed", "window", "scroll"):
+                raise ValueError("--capture expects region, full, delayed, window or scroll")
             action = "capture"
         elif a in ("--record", "--ocr", "--library", "--about", "--shortcuts"):
             action = a[2:]
@@ -99,12 +102,14 @@ class LauncherWindow(Adw.ApplicationWindow):
             ("window", L.t("Chọn cửa sổ"), "ms-teal", app.pick_window),
             ("fullscreen", L.t("Chụp toàn màn hình"), "ms-blue", lambda: app.begin_capture("full")),
             ("timer", L.t("Chụp sau 3 giây"), "ms-gray", lambda: app.begin_capture("region", 3)),
+            ("scroll", L.t("Chụp cuộn trang dài"), "ms-orange", lambda: app.begin_capture("scroll")),
             ("record", L.t("Quay video màn hình"), "ms-red", app.toggle_recording),
             ("ocr", L.t("Chụp và trích chữ (OCR)"), "ms-purple", lambda: app.begin_capture("ocr")),
             ("library", L.t("Thư viện"), "ms-green", lambda: app.show_library()),
         ]
         tips = {
             "window": L.t("Hệ thống sẽ cho bạn chọn cửa sổ cần chụp, ảnh mở thẳng trong trình chỉnh sửa"),
+            "scroll": L.t("Chọn vùng có nội dung cần cuộn, MiniSnap sẽ tự cuộn xuống và ghép thành một ảnh dài"),
         }
         for i, (glyph, text, css, cb) in enumerate(buttons):
             b = Gtk.Button()
@@ -152,6 +157,8 @@ class MiniSnapApp(Adw.Application):
         self.launcher = None
         self.library = None
         self.recorder = None
+        self.scroller = None
+        self.gshortcuts = None
         self.overlay = None
         self.shortcuts_window = None
         self.about_window = None
@@ -167,10 +174,21 @@ class MiniSnapApp(Adw.Application):
         L.load()
         theme.install()
         Gtk.Window.set_default_icon_name(APP_ID)
+        from .globalshortcuts import GlobalShortcuts
+        self.gshortcuts = GlobalShortcuts(self)
         self._add_actions()
         if not self.selftest_dir:
-            from . import updater
-            updater.schedule_auto_check(self._on_update_found)
+            # Inside Flatpak, Flathub delivers the updates: no update check at all.
+            if not paths.in_flatpak():
+                from . import updater
+                updater.schedule_auto_check(self._on_update_found)
+            if settings.get("global_shortcuts_enabled"):
+                GLib.idle_add(lambda: (self.gshortcuts.start(), False)[1])
+
+    @staticmethod
+    def updates_from_app():
+        """False inside Flatpak (Flathub updates the app); True for .deb and source installs."""
+        return not paths.in_flatpak()
 
     def _add_actions(self):
         def simple(name, cb, accels=None):
@@ -182,6 +200,7 @@ class MiniSnapApp(Adw.Application):
 
         simple("capture-region", lambda: self.begin_capture("region"))
         simple("capture-full", lambda: self.begin_capture("full"))
+        simple("capture-scroll", lambda: self.begin_capture("scroll"))
         simple("record", self.toggle_recording)
         simple("ocr", lambda: self.begin_capture("ocr"))
         simple("library", lambda: self.show_library())
@@ -201,6 +220,11 @@ class MiniSnapApp(Adw.Application):
             a.connect("change-state", self._on_toggle_setting, key)
             self.add_action(a)
 
+        gs = Gio.SimpleAction.new_stateful("global-shortcuts", None,
+                                           GLib.Variant("b", bool(settings.get("global_shortcuts_enabled"))))
+        gs.connect("change-state", self._on_global_shortcuts)
+        self.add_action(gs)
+
     def build_menu(self):
         menu = Gio.Menu()
         langs = Gio.Menu()
@@ -209,11 +233,15 @@ class MiniSnapApp(Adw.Application):
         menu.append_submenu("Ngôn ngữ / Language", langs)   # always bilingual so it can be found
         prefs = Gio.Menu()
         prefs.append(L.t("Hỏi chụp ảnh / quay video / chụp cuộn sau khi chọn vùng"), "app.ask-after-select")
-        prefs.append(L.t("Tự kiểm tra cập nhật hằng ngày"), "app.auto-update")
+        if self.updates_from_app():
+            prefs.append(L.t("Tự kiểm tra cập nhật hằng ngày"), "app.auto-update")
+        if self.gshortcuts is not None and self.gshortcuts.available:
+            prefs.append(L.t("Bật phím tắt toàn cục"), "app.global-shortcuts")
         prefs.append(L.t("Phím tắt bàn phím…"), "app.shortcuts")
         menu.append_section(None, prefs)
         about = Gio.Menu()
-        about.append(L.t("Kiểm tra cập nhật..."), "app.check-updates")
+        if self.updates_from_app():
+            about.append(L.t("Kiểm tra cập nhật..."), "app.check-updates")
         about.append(L.t("Giới thiệu MiniSnap"), "app.about")
         about.append(L.t("Thoát MiniSnap"), "app.quit")
         menu.append_section(None, about)
@@ -249,6 +277,19 @@ class MiniSnapApp(Adw.Application):
         except OSError as e:
             self._message(L.t("Không lưu được cài đặt:\n") + str(e))
 
+    def _on_global_shortcuts(self, action, value):
+        try:
+            self.gshortcuts.set_enabled(bool(value.get_boolean()))
+            action.set_state(value)
+        except OSError as e:
+            self._message(L.t("Không lưu được cài đặt:\n") + str(e))
+
+    def sync_global_shortcuts_action(self):
+        """Keeps the menu check mark in step when shortcuts are enabled from the shortcuts window."""
+        a = self.lookup_action("global-shortcuts")
+        if a is not None:
+            a.set_state(GLib.Variant("b", bool(settings.get("global_shortcuts_enabled"))))
+
     # ---------- Command line ----------
 
     def do_command_line(self, command_line):
@@ -271,6 +312,8 @@ class MiniSnapApp(Adw.Application):
                 self.begin_capture("region", 3)
             elif value == "window":
                 self.pick_window()
+            elif value == "scroll":
+                self.begin_capture("scroll")
             else:
                 self.begin_capture("region")
         elif action == "record":
@@ -367,12 +410,21 @@ class MiniSnapApp(Adw.Application):
     def quit_app(self):
         if self.recorder is not None:
             self.recorder.stop()
+        if self.scroller is not None:
+            self.scroller.stop()
+        if self.gshortcuts is not None:
+            # Stop running in the background; the setting stays, so shortcuts are bound again next time.
+            self.gshortcuts.shutdown()
         for w in list(self.get_windows()):
             w.close()
 
     def do_shutdown(self):
         if self.recorder is not None and self.recorder.pipeline is not None:
             self.recorder.stop()
+        if self.scroller is not None:
+            self.scroller.cancel()
+        if self.gshortcuts is not None:
+            self.gshortcuts.close()
         Adw.Application.do_shutdown(self)
 
     # ---------- Opening images ----------
@@ -440,11 +492,13 @@ class MiniSnapApp(Adw.Application):
             return L.t("Quay video: chọn cửa sổ hoặc kéo chọn vùng cần quay (Enter = toàn màn hình)")
         if mode == "ocr":
             return L.t("Trích chữ: chọn vùng có chữ cần lấy")
+        if mode == "scroll":
+            return L.t("Chụp cuộn: kéo chọn vùng có nội dung cần cuộn — MiniSnap sẽ tự cuộn xuống")
         return None
 
     def begin_capture(self, mode, delay=0):
-        """mode: region, full, ocr or video."""
-        if self.busy or (self.recorder is not None and mode != "video"):
+        """mode: region, full, ocr, video or scroll."""
+        if self.busy or self.scroller is not None or (self.recorder is not None and mode != "video"):
             return
         self.busy = True
         self._hold()
@@ -501,13 +555,19 @@ class MiniSnapApp(Adw.Application):
             else:
                 self._end_capture(cancelled=True)
                 return
+        elif mode == "scroll" or choice == "scroll":
+            if rect[2] >= 32 and rect[3] >= 32:
+                self.start_scroll(logical, rect, self._total_logical)
+            else:
+                self._end_capture(cancelled=True)
+                return
         else:
             self.save_and_edit(render.crop(shot, rect))
         self._end_capture(cancelled=False)
 
     def pick_window(self):
         """Wayland can't tell apps where windows are, so the desktop's own screenshot UI picks one."""
-        if self.busy or self.recorder is not None:
+        if self.busy or self.recorder is not None or self.scroller is not None:
             return
         self.busy = True
         self._hold()
@@ -522,6 +582,24 @@ class MiniSnapApp(Adw.Application):
             self.save_and_edit(surface)
             self._end_capture(cancelled=False)
         GLib.timeout_add(350, lambda: (capture.take_screenshot(True, got), False)[1])
+
+    # ---------- Scrolling capture ----------
+
+    def start_scroll(self, logical, rect, total_logical):
+        from .scrollcapture import ScrollCaptureSession
+        self.scroller = ScrollCaptureSession(self, logical, rect, total_logical, self._on_scroll_done)
+        # Keep running while the portal's permission dialog is open (no window of ours is shown then).
+        self.hold()
+        self.scroller.start()
+
+    def _on_scroll_done(self, surface, error):
+        self.scroller = None
+        GLib.idle_add(lambda: (self.release(), False)[1])
+        if surface is not None:
+            self.save_and_edit(surface)
+        elif error:
+            from .scrollcapture import show_error
+            show_error(self, error)
 
     # ---------- Recording ----------
 

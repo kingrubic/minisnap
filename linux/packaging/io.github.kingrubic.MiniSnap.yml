@@ -10,8 +10,6 @@ finish-args:
   - --socket=wayland
   - --socket=fallback-x11
   - --device=dri
-  # Only for the "Check for updates" request to api.github.com (see PRIVACY.md).
-  - --share=network
   # Captures are saved to Pictures/MiniSnap and Videos/MiniSnap.
   - --filesystem=xdg-pictures/MiniSnap:create
   - --filesystem=xdg-videos/MiniSnap:create

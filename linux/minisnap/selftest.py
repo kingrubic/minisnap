@@ -1,8 +1,9 @@
 """Headless self-test: `python3 -m minisnap --selftest OUTDIR`.
 
 Runs under `xvfb-run -a -s "-screen 0 1600x1000x24"` without any portal (none is called here).
-Writes OUTDIR/log.txt plus PNGs: render.png, stitch.png, and screenshots of every window in both
-languages and both colour schemes (e.g. editor-vi-dark.png). Each step logs "ok" or
+Writes OUTDIR/log.txt plus PNGs: render.png, stitch.png, scroll-session.png, and screenshots of every
+window in both languages and both colour schemes (e.g. editor-vi-dark.png, shortcuts-portal-en-light.png,
+scroll-status-vi-dark.png). Each step logs "ok" or
 "FAILED: reason"; a failing step never stops the others; the exit code is non-zero if any failed.
 (SelfTest in windows/src/Program.cs.)
 """
@@ -16,7 +17,7 @@ import tempfile
 import time
 import traceback
 
-WINDOW_KINDS = ("launcher", "editor", "overlay", "library", "about", "shortcuts")
+WINDOW_KINDS = ("launcher", "editor", "overlay", "library", "about", "shortcuts", "shortcuts-portal", "scroll-status")
 
 
 def run(outdir):
@@ -126,6 +127,41 @@ def sample_shapes():
     ]
 
 
+def viewport_frame(page, off, width, view_h, header, footer):
+    """What a 'browser' shows of `page` scrolled by `off`: sticky header and footer over the content."""
+    import cairo
+    from . import _gi  # noqa: F401
+    from gi.repository import PangoCairo
+    from .shapes import font_desc
+
+    frame = cairo.ImageSurface(cairo.FORMAT_ARGB32, width, view_h)
+    cr = cairo.Context(frame)
+    cr.save()
+    cr.rectangle(0, header, width, view_h - header - footer)
+    cr.clip()
+    cr.set_source_surface(page, 0, header - (off + header))
+    cr.paint()
+    cr.restore()
+    layout = PangoCairo.create_layout(cr)
+    layout.set_font_description(font_desc(12))
+    cr.set_source_rgb(70 / 255.0, 130 / 255.0, 180 / 255.0)
+    cr.rectangle(0, 0, width, header)
+    cr.fill()
+    cr.set_source_rgb(1, 1, 1)
+    cr.move_to(10, 25)
+    layout.set_text("STICKY HEADER", -1)
+    PangoCairo.show_layout(cr, layout)
+    cr.set_source_rgb(47 / 255.0, 79 / 255.0, 79 / 255.0)
+    cr.rectangle(0, view_h - footer, width, footer)
+    cr.fill()
+    cr.set_source_rgb(1, 1, 1)
+    cr.move_to(10, view_h - footer + 15)
+    layout.set_text("STICKY FOOTER", -1)
+    PangoCairo.show_layout(cr, layout)
+    frame.flush()
+    return frame
+
+
 def snapshot_window(win, path):
     """Renders a presented window to PNG through Gtk.WidgetPaintable and the window's own renderer."""
     from . import _gi  # noqa: F401
@@ -189,6 +225,9 @@ class Runner:
             ("i18n", self.test_i18n),
             ("render", self.test_render),
             ("stitch", self.test_stitch),
+            ("scroll session", self.test_scroll_session),
+            ("scroll portal plumbing", self.test_scroll_plumbing),
+            ("global shortcuts model", self.test_global_shortcuts),
             ("monitor mapping", self.test_mapping),
             ("record crop", self.test_crop),
             ("updater compare", self.test_updater),
@@ -304,9 +343,6 @@ class Runner:
 
     def test_stitch(self):
         """Synthetic scrolling page with a sticky header and footer, viewed through a 600px viewport."""
-        import cairo
-        from gi.repository import PangoCairo
-        from .shapes import font_desc
         from .stitcher import ADDED, NO_MOVEMENT, ScrollStitcher
 
         page_h, view_h, header, footer, width = 2600, 600, 70, 50, 800
@@ -316,31 +352,7 @@ class Runner:
         offsets = [0, 230, 460, 700, 950, 1200, 1450, 1700, 1950, last, last]
         outcomes = []
         for off in offsets:
-            frame = cairo.ImageSurface(cairo.FORMAT_ARGB32, width, view_h)
-            cr = cairo.Context(frame)
-            cr.save()
-            cr.rectangle(0, header, width, view_h - header - footer)
-            cr.clip()
-            cr.set_source_surface(page, 0, header - (off + header))
-            cr.paint()
-            cr.restore()
-            layout = PangoCairo.create_layout(cr)
-            layout.set_font_description(font_desc(12))
-            cr.set_source_rgb(70 / 255.0, 130 / 255.0, 180 / 255.0)
-            cr.rectangle(0, 0, width, header)
-            cr.fill()
-            cr.set_source_rgb(1, 1, 1)
-            cr.move_to(10, 25)
-            layout.set_text("STICKY HEADER", -1)
-            PangoCairo.show_layout(cr, layout)
-            cr.set_source_rgb(47 / 255.0, 79 / 255.0, 79 / 255.0)
-            cr.rectangle(0, view_h - footer, width, footer)
-            cr.fill()
-            cr.set_source_rgb(1, 1, 1)
-            cr.move_to(10, view_h - footer + 15)
-            layout.set_text("STICKY FOOTER", -1)
-            PangoCairo.show_layout(cr, layout)
-            frame.flush()
+            frame = viewport_frame(page, off, width, view_h, header, footer)
             if stitcher.frame_count == 0:
                 stitcher.add_first(frame)
                 outcomes.append("first")
@@ -359,6 +371,185 @@ class Runner:
         if stitcher.total_height != expected or result.get_height() != expected:
             raise RuntimeError("height %d != expected %d" % (stitcher.total_height, expected))
         return "height %d, %d frames added" % (stitcher.total_height, outcomes.count(ADDED))
+
+    def test_scroll_session(self):
+        """The scrolling-capture state machine on the same synthetic page: scroll(n) moves the page by
+        n * 120 px (clamped at the end), grab_frame() returns the viewport, schedule() queues the step
+        and the loop below runs it at once (no real timers)."""
+        from .scrollcapture import ScrollStateMachine
+
+        page_h, view_h, header, footer, width = 2600, 600, 70, 50, 800
+        page = sample_image(width, page_h, 44, 2)
+        last = page_h - (view_h - header - footer) - header
+        state = {"off": 0, "result": None, "done": 0}
+        scrolls, progress, queue = [], [], []
+
+        def grab():
+            return viewport_frame(page, state["off"], width, view_h, header, footer)
+
+        def scroll(n):
+            scrolls.append(n)
+            state["off"] = max(0, min(last, state["off"] + n * 120))
+
+        def done(image):
+            state["done"] += 1
+            state["result"] = image
+
+        machine = ScrollStateMachine(view_h, grab, scroll, lambda ms, fn: queue.append(fn), done,
+                                     progress=lambda n, h: progress.append((n, h)))
+        machine.start()
+        steps = 0
+        while queue and steps < 2000:
+            queue.pop(0)()
+            steps += 1
+        img = state["result"]
+        if state["done"] != 1:
+            raise RuntimeError("done() called %d times" % state["done"])
+        if img is None:
+            raise RuntimeError("no image (scrolls %s)" % scrolls)
+        img.write_to_png(os.path.join(self.outdir, "scroll-session.png"))
+        expected = page_h + footer
+        self.log("scroll session: scrolls %s | frames %d | height=%d expected=%d"
+                 % (scrolls, progress[-1][0] if progress else 0, img.get_height(), expected))
+        if img.get_height() != expected or img.get_width() != width:
+            raise RuntimeError("image %dx%d, expected %dx%d" % (img.get_width(), img.get_height(), width, expected))
+        if state["off"] != last:
+            raise RuntimeError("stopped at offset %d, expected the end of the page (%d)" % (state["off"], last))
+        return "height %d, %d frames, %d steps" % (img.get_height(), progress[-1][0], steps)
+
+    def test_scroll_plumbing(self):
+        """Selection -> stream mapping and RemoteDesktop.Start parsing, without D-Bus."""
+        from gi.repository import GLib
+        from . import portal, render
+        from .app import parse_args
+        from .scrollcapture import (parse_start_response, pixels_to_logical, pointer_position,
+                                    select_devices_options, selection_to_stream, surface_from_bgrx)
+
+        if parse_args(["--capture", "scroll"])[:2] != ("capture", "scroll"):
+            raise RuntimeError("--capture scroll not parsed")
+
+        # Desktop: 1920x1080 + 1280x1024 logical, screenshot at 2x (6400x2160 pixels).
+        info = (0, 0, 2.0, 2.0)
+        total = (0, 0, 3200, 1080)
+        logical = pixels_to_logical((4000, 200, 1000, 800), info)
+        if logical != (2000.0, 100.0, 500.0, 400.0):
+            raise RuntimeError("pixels_to_logical -> %s" % (logical,))
+
+        results = {
+            "devices": 2,
+            "streams": [(57, {"position": (1920, 0), "size": (1280, 1024), "source_type": 1})],
+            "restore_token": "token-123",
+        }
+        devices, streams, token = parse_start_response(results)
+        if devices != 2 or token != "token-123" or len(streams) != 1:
+            raise RuntimeError("parse_start_response -> %s %s %s" % (devices, streams, token))
+        s = streams[0]
+        if s["node"] != 57 or s["position"] != (1920, 0) or s["size"] != (1280, 1024):
+            raise RuntimeError("stream %s" % s)
+        # The same parsing on a real variant, as the portal sends it.
+        v = GLib.Variant("a{sv}", {
+            "devices": GLib.Variant("u", 2),
+            "streams": GLib.Variant("a(ua{sv})", [(57, {"position": GLib.Variant("(ii)", (1920, 0)),
+                                                        "size": GLib.Variant("(ii)", (1280, 1024))})]),
+        })
+        if parse_start_response(v.unpack())[1][0]["size"] != (1280, 1024):
+            raise RuntimeError("variant parse")
+        if parse_start_response({})[1] != [] or parse_start_response({})[0] is not None:
+            raise RuntimeError("empty response")
+
+        crop = selection_to_stream(logical, s, 2560, 2048, total)       # monitor streamed at 2x
+        if crop != (160, 200, 1000, 800):
+            raise RuntimeError("selection_to_stream -> %s" % (crop,))
+        if pointer_position(logical, s, total) != (330.0, 300.0):
+            raise RuntimeError("pointer_position -> %s" % (pointer_position(logical, s, total),))
+        whole = {"node": 3, "position": None, "size": None}
+        if selection_to_stream(logical, whole, 6400, 2160, total) != (4000, 200, 1000, 800):
+            raise RuntimeError("whole-desktop stream -> %s" % (selection_to_stream(logical, whole, 6400, 2160, total),))
+        if selection_to_stream((100, 100, 300, 300), s, 2560, 2048, total) is not None:
+            raise RuntimeError("selection on the other monitor accepted")
+
+        o1 = select_devices_options(1, "tok", "h1")
+        o2 = select_devices_options(2, "tok", "h2")
+        o3 = select_devices_options(2, None, "h3")
+        if "persist_mode" in o1 or "restore_token" in o1 or o1["types"].get_uint32() != portal.DEVICE_POINTER:
+            raise RuntimeError("version 1 options %s" % o1)
+        if o2["persist_mode"].get_uint32() != 2 or o2["restore_token"].get_string() != "tok":
+            raise RuntimeError("version 2 options %s" % o2)
+        if "restore_token" in o3 or "persist_mode" not in o3:
+            raise RuntimeError("no-token options %s" % o3)
+        params = GLib.Variant("(oa{sv})", ("/org/freedesktop/portal/desktop/session/1_42/minisnap", o2))
+        if params.get_type_string() != "(oa{sv})":
+            raise RuntimeError("SelectDevices params %s" % params.get_type_string())
+
+        # BGRx frame -> cropped cairo surface (one red pixel at (5, 2) in an 8x4 frame).
+        w, h = 8, 4
+        data = bytearray([200, 200, 200, 0] * (w * h))
+        o = (2 * w + 5) * 4
+        data[o:o + 4] = bytes([0, 0, 255, 0]) if sys.byteorder == "little" else bytes([0, 255, 0, 0])
+        frame = surface_from_bgrx(bytes(data), w, h, None, (4, 1, 3, 2))
+        if render.size(frame) != (3, 2) or render.pixel_rgb(frame, 1, 1) != (255, 0, 0):
+            raise RuntimeError("surface_from_bgrx -> %s %s" % (render.size(frame), render.pixel_rgb(frame, 1, 1)))
+        return "crop %s, pointer %s" % (crop, pointer_position(logical, s, total))
+
+    def test_global_shortcuts(self):
+        from gi.repository import GLib
+        from . import portal
+        from .globalshortcuts import (ACTIONS, GlobalShortcuts, bind_params, bind_variant, dispatch,
+                                      parse_shortcuts, pretty_trigger, shortcut_list)
+
+        v = bind_variant()
+        if v.get_type_string() != "a(sa{sv})" or v.n_children() != len(shortcut_list()):
+            raise RuntimeError("bind variant %s with %d items" % (v.get_type_string(), v.n_children()))
+        sid, props = v.get_child_value(0).unpack()
+        if sid != "capture-region" or props.get("preferred_trigger") != "CTRL+ALT+c" or not props.get("description"):
+            raise RuntimeError("first shortcut %s %s" % (sid, props))
+        ids = [s[0] for s in shortcut_list()]
+        if ids != ["capture-region", "capture-full", "capture-scroll", "record", "ocr", "library"]:
+            raise RuntimeError("shortcut ids %s" % ids)
+        p = bind_params("/org/freedesktop/portal/desktop/session/1_42/s", "tok")
+        if p.get_type_string() != "(oa(sa{sv})sa{sv})":
+            raise RuntimeError("BindShortcuts params %s" % p.get_type_string())
+
+        class FakeApp:
+            selftest_dir = "fake"
+
+            def __init__(self):
+                self.calls = []
+
+            def activate_action(self, name, param):
+                self.calls.append(name)
+
+        fake = FakeApp()
+        expected = {"capture-region": "capture-region", "capture-full": "capture-full",
+                    "capture-scroll": "capture-scroll", "record": "record", "ocr": "ocr", "library": "library"}
+        for shortcut_id, action in expected.items():
+            if dispatch(fake, shortcut_id) != action or fake.calls[-1] != action:
+                raise RuntimeError("%s dispatched to %s" % (shortcut_id, fake.calls[-1:]))
+            if not self.app.lookup_action(action):
+                raise RuntimeError("the app has no action %s" % action)
+        if dispatch(fake, "unknown") is not None or len(fake.calls) != len(expected):
+            raise RuntimeError("unknown id dispatched")
+        if set(ACTIONS) != set(ids):
+            raise RuntimeError("ACTIONS / shortcut_list mismatch")
+
+        # The Activated signal handler: only our own session is obeyed.
+        gs = GlobalShortcuts(fake)
+        if gs.available:
+            raise RuntimeError("self-test must not look for the real portal")
+        gs.session = "/org/freedesktop/portal/desktop/session/1_42/s"
+        sig = GLib.Variant("(osta{sv})", (gs.session, "ocr", 1234, {}))
+        gs._on_activated(None, ":1.5", portal.OBJECT_PATH, portal.GLOBAL_SHORTCUTS_IFACE, "Activated", sig)
+        other = GLib.Variant("(osta{sv})", ("/org/freedesktop/portal/desktop/session/1_99/x", "record", 1, {}))
+        gs._on_activated(None, ":1.5", portal.OBJECT_PATH, portal.GLOBAL_SHORTCUTS_IFACE, "Activated", other)
+        if fake.calls[-1] != "ocr" or len(fake.calls) != len(expected) + 1:
+            raise RuntimeError("Activated handler calls %s" % fake.calls)
+
+        got = parse_shortcuts([("capture-region", {"description": "x", "trigger_description": "Ctrl+Alt+C"})])
+        if got != {"capture-region": "Ctrl+Alt+C"}:
+            raise RuntimeError("parse_shortcuts -> %s" % got)
+        if pretty_trigger("CTRL+ALT+c") != "Ctrl+Alt+C" or pretty_trigger("LOGO+SHIFT+F5") != "Super+Shift+F5":
+            raise RuntimeError("pretty_trigger")
+        return "%d shortcuts, signature %s" % (v.n_children(), p.get_type_string())
 
     def test_mapping(self):
         from .overlay import map_monitors
@@ -588,6 +779,16 @@ class Runner:
             from .shortcuts import ShortcutsWindow
             win = ShortcutsWindow(app)
             delay = 700
+        elif kind == "shortcuts-portal":
+            # As shown on desktops with the GlobalShortcuts portal (forced: no portal is called here).
+            from .shortcuts import ShortcutsWindow
+            win = ShortcutsWindow(app, portal_available=True)
+            delay = 700
+        elif kind == "scroll-status":
+            from .scrollcapture import ScrollStatusWindow
+            win = ScrollStatusWindow(app, None)
+            win.update(7, 4210)
+            delay = 500
         else:
             raise ValueError(kind)
         holder["window"] = win

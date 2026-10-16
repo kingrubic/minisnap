@@ -98,7 +98,7 @@ entry.ms-size-entry {
   font-size: 1.05em;
 }
 
-/* Recording bar */
+/* Recording bar, scrolling-capture status */
 .ms-floatbar { background-color: rgb(32,32,36); color: white; padding: 6px; }
 .ms-float-button {
   background-color: rgb(240,240,242);
@@ -111,6 +111,7 @@ entry.ms-size-entry {
 .ms-rec-time { font-weight: bold; font-size: 1.25em; color: white; margin: 0 10px 0 8px; }
 .ms-rec-live { color: rgb(255,90,90); }
 .ms-rec-paused { color: gold; }
+.ms-scroll-status { color: white; font-weight: bold; margin: 0 10px 0 8px; }
 
 /* OCR / update text areas */
 .ms-ocr-text { font-size: 1.1em; }

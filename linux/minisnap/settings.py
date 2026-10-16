@@ -12,6 +12,9 @@ DEFAULTS = {
     "ask_after_select": True,    # show the screenshot / video / scroll bar after a region is selected
     "auto_update_check": True,   # daily check against api.github.com (see PRIVACY.md)
     "last_update_check": None,   # ISO 8601 UTC time of the last check
+    "remote_desktop_restore_token": None,   # RemoteDesktop portal token: no permission dialog every time
+    "global_shortcuts_enabled": False,      # bind shortcuts through the GlobalShortcuts portal, run in background
+    "global_shortcuts_notified": False,     # the "runs in the background" notification was shown once
 }
 
 _cache = None

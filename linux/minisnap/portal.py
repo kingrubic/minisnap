@@ -1,4 +1,5 @@
-"""xdg-desktop-portal helpers over Gio.DBus: Screenshot and ScreenCast.
+"""xdg-desktop-portal helpers over Gio.DBus: Screenshot, ScreenCast and the pieces shared with
+RemoteDesktop (scrolling capture) and GlobalShortcuts.
 
 Portal methods return a Request object path at once and deliver their result later through the
 org.freedesktop.portal.Request::Response signal. We subscribe to the predicted request path
@@ -19,12 +20,18 @@ REQUEST_IFACE = "org.freedesktop.portal.Request"
 SCREENSHOT_IFACE = "org.freedesktop.portal.Screenshot"
 SCREENCAST_IFACE = "org.freedesktop.portal.ScreenCast"
 SESSION_IFACE = "org.freedesktop.portal.Session"
+REMOTE_DESKTOP_IFACE = "org.freedesktop.portal.RemoteDesktop"
+GLOBAL_SHORTCUTS_IFACE = "org.freedesktop.portal.GlobalShortcuts"
+PROPERTIES_IFACE = "org.freedesktop.DBus.Properties"
 
 SOURCE_MONITOR = 1
 SOURCE_WINDOW = 2
 CURSOR_HIDDEN = 1
 CURSOR_EMBEDDED = 2
 CURSOR_METADATA = 4
+DEVICE_KEYBOARD = 1
+DEVICE_POINTER = 2
+PERSIST_UNTIL_REVOKED = 2
 
 _counter = itertools.count(1)
 
@@ -38,6 +45,61 @@ def _bus():
         return Gio.bus_get_sync(Gio.BusType.SESSION, None)
     except GLib.Error as e:
         raise PortalError(e.message)
+
+
+def bus():
+    """The session bus; raises PortalError when there is none."""
+    return _bus()
+
+
+def get_property(conn, iface, name, timeout=3000):
+    """A portal property (e.g. an interface's `version`), or None when the interface or the property
+    does not exist (an old portal or a backend without that interface)."""
+    try:
+        ret = conn.call_sync(BUS_NAME, OBJECT_PATH, PROPERTIES_IFACE, "Get",
+                             GLib.Variant("(ss)", (iface, name)), GLib.VariantType.new("(v)"),
+                             Gio.DBusCallFlags.NONE, timeout, None)
+    except GLib.Error:
+        return None
+    try:
+        return ret.unpack()[0]
+    except (TypeError, IndexError):
+        return None
+
+
+def interface_version(iface, conn=None):
+    """The portal interface's version, 0 when it is missing (or there is no session bus)."""
+    try:
+        conn = conn or _bus()
+    except PortalError:
+        return 0
+    v = get_property(conn, iface, "version")
+    try:
+        return int(v) if v is not None else 0
+    except (TypeError, ValueError):
+        return 0
+
+
+def open_pipewire_remote(conn, session):
+    """ScreenCast.OpenPipeWireRemote: a new file descriptor for the session's PipeWire remote.
+    Raises GLib.Error. The caller owns (and should close) the descriptor."""
+    ret, fds = conn.call_with_unix_fd_list_sync(
+        BUS_NAME, OBJECT_PATH, SCREENCAST_IFACE, "OpenPipeWireRemote",
+        GLib.Variant("(oa{sv})", (session, {})), GLib.VariantType.new("(h)"),
+        Gio.DBusCallFlags.NONE, -1, None, None)
+    index = ret.get_child_value(0).get_handle()
+    return fds.get(index)
+
+
+def close_session(conn, session):
+    """org.freedesktop.portal.Session.Close, fire and forget."""
+    if conn is None or not session:
+        return
+    try:
+        conn.call(BUS_NAME, session, SESSION_IFACE, "Close", None, None,
+                  Gio.DBusCallFlags.NONE, -1, None, None)
+    except GLib.Error:
+        pass
 
 
 def new_token(prefix="minisnap"):
@@ -94,6 +156,10 @@ class _Request:
         self.done = True
         self._unsubscribe()
         self.callback(int(code), results or {})
+
+
+# Public name for the other portal clients (scrollcapture.py, globalshortcuts.py).
+Request = _Request
 
 
 # ---------- Screenshot ----------
@@ -154,13 +220,7 @@ class ScreenCastSession:
                  self._on_created)
 
     def _available_cursor_modes(self):
-        try:
-            ret = self.conn.call_sync(BUS_NAME, OBJECT_PATH, "org.freedesktop.DBus.Properties", "Get",
-                                      GLib.Variant("(ss)", (SCREENCAST_IFACE, "AvailableCursorModes")),
-                                      GLib.VariantType.new("(v)"), Gio.DBusCallFlags.NONE, 3000, None)
-            return int(ret.unpack()[0])
-        except (GLib.Error, TypeError, ValueError):
-            return 0
+        return available_cursor_modes(self.conn)
 
     def _fail(self, code, results):
         self.close()
@@ -204,12 +264,7 @@ class ScreenCastSession:
             return
         node_id, props = streams[0]
         try:
-            ret, fds = self.conn.call_with_unix_fd_list_sync(
-                BUS_NAME, OBJECT_PATH, SCREENCAST_IFACE, "OpenPipeWireRemote",
-                GLib.Variant("(oa{sv})", (self.session, {})), GLib.VariantType.new("(h)"),
-                Gio.DBusCallFlags.NONE, -1, None, None)
-            index = ret.get_child_value(0).get_handle()
-            fd = fds.get(index)
+            fd = open_pipewire_remote(self.conn, self.session)
         except GLib.Error as e:
             self._fail(2, {"error": e.message})
             return
@@ -219,9 +274,13 @@ class ScreenCastSession:
         if self.closed:
             return
         self.closed = True
-        if self.conn is not None and self.session:
-            try:
-                self.conn.call(BUS_NAME, self.session, SESSION_IFACE, "Close", None, None,
-                               Gio.DBusCallFlags.NONE, -1, None, None)
-            except GLib.Error:
-                pass
+        close_session(self.conn, self.session)
+
+
+def available_cursor_modes(conn):
+    """ScreenCast AvailableCursorModes bitmask (0 when unknown)."""
+    v = get_property(conn, SCREENCAST_IFACE, "AvailableCursorModes")
+    try:
+        return int(v) if v is not None else 0
+    except (TypeError, ValueError):
+        return 0

@@ -6,8 +6,8 @@
   <project_license>MIT</project_license>
 
   <name>MiniSnap</name>
-  <summary>Screenshots, screen recording and text extraction</summary>
-  <summary xml:lang="vi">Chụp ảnh, quay video màn hình và trích chữ</summary>
+  <summary>Capture, annotate and record your screen</summary>
+  <summary xml:lang="vi">Chụp, chú thích và quay màn hình</summary>
 
   <developer id="io.github.kingrubic">
     <name>Nguyễn Năng Quốc Bảo</name>
@@ -20,14 +20,17 @@
     </p>
     <ul>
       <li>Capture a region, a window or the full screen, with a magnifier and exact pixel sizes</li>
+      <li>After selecting an area, choose a screenshot, a video or a scrolling capture</li>
+      <li>Scrolling capture of long pages, with sticky headers and footers handled</li>
       <li>Annotate with arrows, boxes, ellipses, lines, a pen, highlights, text, blur and step numbers</li>
       <li>Every capture is saved to Pictures/MiniSnap and copied to the clipboard</li>
       <li>Record the screen or a region to MP4</li>
       <li>Extract text from images (OCR) with Tesseract, including Vietnamese</li>
       <li>A library of your images and videos with thumbnails</li>
+      <li>Global keyboard shortcuts on desktops that support them</li>
       <li>Vietnamese and English interface; works on Wayland and X11 through xdg-desktop-portal</li>
     </ul>
-    <p>MiniSnap collects no data. It only contacts api.github.com to check for updates, which can be turned off.</p>
+    <p>MiniSnap collects no data. Screen access always goes through the system's permission prompts.</p>
   </description>
 
   <launchable type="desktop-id">io.github.kingrubic.MiniSnap.desktop</launchable>
@@ -38,6 +41,23 @@
   <url type="homepage">https://github.com/kingrubic/minisnap</url>
   <url type="bugtracker">https://github.com/kingrubic/minisnap/issues</url>
   <url type="vcs-browser">https://github.com/kingrubic/minisnap</url>
+  <url type="contribute">https://github.com/kingrubic/minisnap#contributing</url>
+
+  <branding>
+    <color type="primary" scheme_preference="light">#ffb38f</color>
+    <color type="primary" scheme_preference="dark">#7a1f3d</color>
+  </branding>
+
+  <screenshots>
+    <screenshot type="default">
+      <caption>Annotate a capture with arrows, boxes, text, blur and step numbers</caption>
+      <image>https://raw.githubusercontent.com/kingrubic/minisnap/main/docs/linux-editor.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Start a capture, a recording or text extraction from the launcher</caption>
+      <image>https://raw.githubusercontent.com/kingrubic/minisnap/main/docs/linux-launcher.png</image>
+    </screenshot>
+  </screenshots>
 
   <content_rating type="oars-1.1"/>
 
@@ -49,6 +69,7 @@
   <keywords>
     <keyword>screenshot</keyword>
     <keyword>screen recording</keyword>
+    <keyword>scrolling capture</keyword>
     <keyword>annotate</keyword>
     <keyword>OCR</keyword>
   </keywords>
@@ -57,11 +78,14 @@
     <control>pointing</control>
     <control>keyboard</control>
   </supports>
+  <requires>
+    <display_length compare="ge">768</display_length>
+  </requires>
 
   <releases>
     <release version="1.6.0" date="2026-10-16">
       <description>
-        <p>First Linux version: region, window and full-screen capture through xdg-desktop-portal, annotation editor, screen recording, text extraction and the image &amp; video library.</p>
+        <p>First Linux version: region, window and full-screen capture through xdg-desktop-portal, annotation editor, screen recording, text extraction and the image and video library.</p>
       </description>
     </release>
   </releases>

@@ -12,7 +12,7 @@ Categories=Graphics;Utility;
 Keywords=screenshot;screen;capture;record;video;ocr;annotate;snip;chụp;màn hình;quay;
 StartupNotify=true
 SingleMainWindow=true
-Actions=capture-region;capture-full;record;ocr;library;
+Actions=capture-region;capture-full;capture-scroll;record;ocr;library;
 
 [Desktop Action capture-region]
 Name=Capture region / window
@@ -23,6 +23,11 @@ Exec=minisnap --capture region
 Name=Capture full screen
 Name[vi]=Chụp toàn màn hình
 Exec=minisnap --capture full
+
+[Desktop Action capture-scroll]
+Name=Scrolling capture
+Name[vi]=Chụp cuộn trang dài
+Exec=minisnap --capture scroll
 
 [Desktop Action record]
 Name=Record screen video

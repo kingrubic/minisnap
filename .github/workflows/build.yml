@@ -2,7 +2,7 @@ name: Build
 
 on:
   push:
-    branches: [main, macos, linux]
+    branches: [main, macos, linux, linux-phase2]
     tags: ['v*']
   pull_request:
   workflow_dispatch:
@@ -61,10 +61,15 @@ jobs:
             gir1.2-gstreamer-1.0 gir1.2-gst-plugins-base-1.0 gstreamer1.0-pipewire \
             gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly \
             tesseract-ocr tesseract-ocr-vie tesseract-ocr-eng \
-            xvfb xauth dbus-x11 at-spi2-core fonts-dejavu-core fonts-noto-core fonts-noto-color-emoji adwaita-icon-theme librsvg2-common
+            appstream desktop-file-utils xvfb xauth dbus-x11 at-spi2-core fonts-dejavu-core fonts-noto-core fonts-noto-color-emoji adwaita-icon-theme librsvg2-common
       - name: Syntax check
         if: steps.src.outputs.present == 'true'
         run: python3 -m compileall -q linux/minisnap
+      - name: Validate AppStream metadata and desktop file (Flathub requirements)
+        if: steps.src.outputs.present == 'true'
+        run: |
+          appstreamcli validate --no-net --explain linux/data/io.github.kingrubic.MiniSnap.metainfo.xml
+          desktop-file-validate linux/data/io.github.kingrubic.MiniSnap.desktop
       - name: Self-test under Xvfb (renders every window to PNG)
         if: steps.src.outputs.present == 'true'
         working-directory: linux
@@ -84,6 +89,11 @@ jobs:
       - name: Install the .deb (checks its dependencies)
         if: steps.src.outputs.present == 'true'
         run: sudo apt-get install -y ./linux/dist/*.deb && test -x /usr/bin/minisnap
+      - name: Flathub manifest generator works
+        if: steps.src.outputs.present == 'true'
+        run: |
+          bash linux/packaging/make-flathub-manifest.sh HEAD /tmp/flathub.yml
+          grep -q 'type: git' /tmp/flathub.yml && grep -q 'linux/bin/minisnap' /tmp/flathub.yml && ! grep -q 'type: dir' /tmp/flathub.yml
       - uses: actions/upload-artifact@v4
         if: steps.src.outputs.present == 'true'
         with:
@@ -115,9 +125,14 @@ jobs:
     needs: [windows, macos, linux, flatpak]
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/download-artifact@v4
         with:
           path: dist
+      - name: Flathub manifest for this tag
+        run: bash linux/packaging/make-flathub-manifest.sh "${{ github.ref_name }}" dist/io.github.kingrubic.MiniSnap.yml
       - uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
@@ -127,3 +142,4 @@ jobs:
             dist/MiniSnap-macOS/MiniSnap-macOS.zip
             dist/MiniSnap-Linux/*.deb
             dist/MiniSnap-x86_64.flatpak/*.flatpak
+            dist/io.github.kingrubic.MiniSnap.yml
