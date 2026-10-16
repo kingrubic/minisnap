@@ -83,6 +83,11 @@
   </requires>
 
   <releases>
+    <release version="1.7.0" date="2026-10-16">
+      <description>
+        <p>Scrolling capture of long pages, global keyboard shortcuts on desktops that support the GlobalShortcuts portal, and a Flatpak build without network access.</p>
+      </description>
+    </release>
     <release version="1.6.0" date="2026-10-16">
       <description>
         <p>First Linux version: region, window and full-screen capture through xdg-desktop-portal, annotation editor, screen recording, text extraction and the image and video library.</p>
