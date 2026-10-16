@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Copyright 2026 Nguyễn Năng Quốc Bảo -->
+<component type="desktop-application">
+  <id>io.github.kingrubic.MiniSnap</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+
+  <name>MiniSnap</name>
+  <summary>Screenshots, screen recording and text extraction</summary>
+  <summary xml:lang="vi">Chụp ảnh, quay video màn hình và trích chữ</summary>
+
+  <developer id="io.github.kingrubic">
+    <name>Nguyễn Năng Quốc Bảo</name>
+  </developer>
+
+  <description>
+    <p>
+      MiniSnap is free, open-source screenshot and screen recording software for everyone.
+      Capture a region, a window or the whole screen, annotate it and share it in seconds.
+    </p>
+    <ul>
+      <li>Capture a region, a window or the full screen, with a magnifier and exact pixel sizes</li>
+      <li>Annotate with arrows, boxes, ellipses, lines, a pen, highlights, text, blur and step numbers</li>
+      <li>Every capture is saved to Pictures/MiniSnap and copied to the clipboard</li>
+      <li>Record the screen or a region to MP4</li>
+      <li>Extract text from images (OCR) with Tesseract, including Vietnamese</li>
+      <li>A library of your images and videos with thumbnails</li>
+      <li>Vietnamese and English interface; works on Wayland and X11 through xdg-desktop-portal</li>
+    </ul>
+    <p>MiniSnap collects no data. It only contacts api.github.com to check for updates, which can be turned off.</p>
+  </description>
+
+  <launchable type="desktop-id">io.github.kingrubic.MiniSnap.desktop</launchable>
+  <provides>
+    <binary>minisnap</binary>
+  </provides>
+
+  <url type="homepage">https://github.com/kingrubic/minisnap</url>
+  <url type="bugtracker">https://github.com/kingrubic/minisnap/issues</url>
+  <url type="vcs-browser">https://github.com/kingrubic/minisnap</url>
+
+  <content_rating type="oars-1.1"/>
+
+  <categories>
+    <category>Graphics</category>
+    <category>Utility</category>
+  </categories>
+
+  <keywords>
+    <keyword>screenshot</keyword>
+    <keyword>screen recording</keyword>
+    <keyword>annotate</keyword>
+    <keyword>OCR</keyword>
+  </keywords>
+
+  <supports>
+    <control>pointing</control>
+    <control>keyboard</control>
+  </supports>
+
+  <releases>
+    <release version="1.5.1" date="2026-10-16">
+      <description>
+        <p>First Linux version: region, window and full-screen capture through xdg-desktop-portal, annotation editor, screen recording, text extraction and the image &amp; video library.</p>
+      </description>
+    </release>
+  </releases>
+</component>

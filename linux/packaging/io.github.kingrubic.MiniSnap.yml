@@ -1,0 +1,84 @@
+# Flatpak manifest for MiniSnap (build: flatpak-builder --user --install build-dir linux/packaging/io.github.kingrubic.MiniSnap.yml)
+app-id: io.github.kingrubic.MiniSnap
+runtime: org.gnome.Platform
+runtime-version: '48'
+sdk: org.gnome.Sdk
+command: minisnap
+
+finish-args:
+  - --share=ipc
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --device=dri
+  # Only for the "Check for updates" request to api.github.com (see PRIVACY.md).
+  - --share=network
+  # Captures are saved to Pictures/MiniSnap and Videos/MiniSnap.
+  - --filesystem=xdg-pictures/MiniSnap:create
+  - --filesystem=xdg-videos/MiniSnap:create
+  # "Show in folder" from the library.
+  - --talk-name=org.freedesktop.FileManager1
+  - --env=TESSDATA_PREFIX=/app/share/tessdata
+
+cleanup:
+  - /include
+  - /lib/pkgconfig
+  - /lib/cmake
+  - /share/man
+  - '*.a'
+
+modules:
+  # Tesseract OCR is not part of the GNOME runtime.
+  - name: leptonica
+    buildsystem: cmake-ninja
+    config-opts:
+      - -DCMAKE_BUILD_TYPE=Release
+      - -DBUILD_SHARED_LIBS=ON
+      - -DSW_BUILD=OFF
+      - -DBUILD_PROG=OFF
+    sources:
+      - type: archive
+        url: https://github.com/DanBloomberg/leptonica/releases/download/1.85.0/leptonica-1.85.0.tar.gz
+        sha256: 3745ae3bf271a6801a2292eead83ac926e3a9bc1bf622e9cd4dd0f3786e17205
+
+  - name: tesseract
+    buildsystem: cmake-ninja
+    config-opts:
+      - -DCMAKE_BUILD_TYPE=Release
+      - -DBUILD_SHARED_LIBS=ON
+      - -DBUILD_TRAINING_TOOLS=OFF
+      - -DSW_BUILD=OFF
+      - -DOPENMP_BUILD=OFF
+      - -DGRAPHICS_DISABLED=ON
+      - -DDISABLE_CURL=ON
+      - -DDISABLE_ARCHIVE=ON
+      - -DBUILD_TESTS=OFF
+    sources:
+      - type: archive
+        url: https://github.com/tesseract-ocr/tesseract/archive/refs/tags/5.5.0.tar.gz
+        sha256: f2fb34ca035b6d087a42875a35a7a5c4155fa9979c6132365b1e5a28ebc3fc11
+
+  - name: tessdata
+    buildsystem: simple
+    build-commands:
+      - install -Dm644 vie.traineddata /app/share/tessdata/vie.traineddata
+      - install -Dm644 eng.traineddata /app/share/tessdata/eng.traineddata
+    sources:
+      - type: file
+        url: https://github.com/tesseract-ocr/tessdata_fast/raw/4.1.0/vie.traineddata
+        sha256: 79df64caf7bcfb2a27df5042ecb6121e196eada34da774956995747636d5bfa1
+      - type: file
+        url: https://github.com/tesseract-ocr/tessdata_fast/raw/4.1.0/eng.traineddata
+        sha256: 7d4322bd2a7749724879683fc3912cb542f19906c83bcc1a52132556427170b2
+
+  - name: minisnap
+    buildsystem: simple
+    build-commands:
+      - mkdir -p /app/share/minisnap
+      - cp -r minisnap /app/share/minisnap/
+      - install -Dm755 bin/minisnap /app/bin/minisnap
+      - install -Dm644 data/io.github.kingrubic.MiniSnap.desktop /app/share/applications/io.github.kingrubic.MiniSnap.desktop
+      - install -Dm644 data/icons/hicolor/scalable/apps/io.github.kingrubic.MiniSnap.svg /app/share/icons/hicolor/scalable/apps/io.github.kingrubic.MiniSnap.svg
+      - install -Dm644 data/io.github.kingrubic.MiniSnap.metainfo.xml /app/share/metainfo/io.github.kingrubic.MiniSnap.metainfo.xml
+    sources:
+      - type: dir
+        path: ..

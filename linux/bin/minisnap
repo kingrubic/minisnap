@@ -1,0 +1,18 @@
+#!/bin/sh
+# MiniSnap launcher. Finds the Python package relative to this script:
+#   .deb      /usr/bin/minisnap      -> /usr/share/minisnap/minisnap
+#   Flatpak   /app/bin/minisnap      -> /app/share/minisnap/minisnap
+#   source    <repo>/linux/bin/minisnap -> <repo>/linux/minisnap
+here="$(dirname "$(readlink -f "$0")")"
+
+for root in "$here/../share/minisnap" "$here/.."; do
+    if [ -f "$root/minisnap/__main__.py" ]; then
+        root="$(cd "$root" && pwd)"
+        PYTHONPATH="$root${PYTHONPATH:+:$PYTHONPATH}"
+        export PYTHONPATH
+        exec python3 -m minisnap "$@"
+    fi
+done
+
+echo "minisnap: cannot find the MiniSnap Python package next to $here" >&2
+exit 1

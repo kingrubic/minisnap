@@ -2,7 +2,7 @@ name: Build
 
 on:
   push:
-    branches: [main, macos]
+    branches: [main, macos, linux]
     tags: ['v*']
   pull_request:
   workflow_dispatch:
@@ -43,10 +43,76 @@ jobs:
           name: MiniSnap-macOS
           path: macos/dist/MiniSnap-macOS.zip
 
+  linux:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check for Linux sources
+        id: src
+        shell: bash
+        run: |
+          if [ -f linux/minisnap/__init__.py ]; then echo "present=true" >> "$GITHUB_OUTPUT"; else echo "present=false" >> "$GITHUB_OUTPUT"; echo "No Linux sources yet - skipping."; fi
+      - name: Install GTK4, libadwaita, GStreamer, Tesseract
+        if: steps.src.outputs.present == 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            python3-gi python3-gi-cairo python3-cairo gir1.2-gtk-4.0 gir1.2-adw-1 \
+            gir1.2-gstreamer-1.0 gir1.2-gst-plugins-base-1.0 gstreamer1.0-pipewire \
+            gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly \
+            tesseract-ocr tesseract-ocr-vie tesseract-ocr-eng \
+            xvfb xauth dbus-x11 at-spi2-core fonts-dejavu-core fonts-noto-core fonts-noto-color-emoji adwaita-icon-theme librsvg2-common
+      - name: Syntax check
+        if: steps.src.outputs.present == 'true'
+        run: python3 -m compileall -q linux/minisnap
+      - name: Self-test under Xvfb (renders every window to PNG)
+        if: steps.src.outputs.present == 'true'
+        working-directory: linux
+        env:
+          GSK_RENDERER: cairo
+          GDK_BACKEND: x11
+          NO_AT_BRIDGE: '1'
+        run: dbus-run-session -- xvfb-run -a -s "-screen 0 1600x1000x24" python3 -m minisnap --selftest "$GITHUB_WORKSPACE/selftest-linux"
+      - uses: actions/upload-artifact@v4
+        if: always() && steps.src.outputs.present == 'true'
+        with:
+          name: MiniSnap-Linux-selftest
+          path: selftest-linux
+      - name: Build .deb
+        if: steps.src.outputs.present == 'true'
+        run: bash linux/packaging/build-deb.sh
+      - name: Install the .deb (checks its dependencies)
+        if: steps.src.outputs.present == 'true'
+        run: sudo apt-get install -y ./linux/dist/*.deb && test -x /usr/bin/minisnap
+      - uses: actions/upload-artifact@v4
+        if: steps.src.outputs.present == 'true'
+        with:
+          name: MiniSnap-Linux
+          path: linux/dist/*.deb
+
+  flatpak:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/flathub-infra/flatpak-github-actions:gnome-48
+      options: --privileged
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check for Linux sources
+        id: src
+        shell: bash
+        run: |
+          if [ -f linux/packaging/io.github.kingrubic.MiniSnap.yml ] && [ -f linux/minisnap/__init__.py ]; then echo "present=true" >> "$GITHUB_OUTPUT"; else echo "present=false" >> "$GITHUB_OUTPUT"; fi
+      - uses: flatpak/flatpak-github-actions/flatpak-builder@v6
+        if: steps.src.outputs.present == 'true'
+        with:
+          bundle: MiniSnap.flatpak
+          manifest-path: linux/packaging/io.github.kingrubic.MiniSnap.yml
+          cache-key: flatpak-builder-${{ hashFiles('linux/packaging/io.github.kingrubic.MiniSnap.yml') }}
+
   # Pushing a tag such as v1.5.0 publishes a GitHub Release with the downloads that were built.
   release:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [windows, macos]
+    needs: [windows, macos, linux]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
@@ -59,3 +125,4 @@ jobs:
           files: |
             dist/MiniSnap-Windows/MiniSnap-Setup.exe
             dist/MiniSnap-macOS/MiniSnap-macOS.zip
+            dist/MiniSnap-Linux/*.deb
