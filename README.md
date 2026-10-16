@@ -19,17 +19,17 @@
 | | Windows | macOS | Linux |
 |---|---|---|---|
 | Capture a region, a window or the full screen, with magnifier | ✅ | ✅ | ✅ (window via the system picker on Wayland) |
-| All-in-one: after selecting an area, pick **screenshot, video or scrolling capture**; resize the area or type an exact size | ✅ | ✅ | ✅ (scrolling capture: next version) |
+| All-in-one: after selecting an area, pick **screenshot, video or scrolling capture**; resize the area or type an exact size | ✅ | ✅ | ✅ |
 | Annotate: arrow, box, ellipse, line, pen, highlight, text, blur, step numbers, crop, undo/redo | ✅ | ✅ | ✅ |
 | Big one-click **Copy / Save / Save as** buttons; every capture is auto-saved and copied | ✅ | ✅ | ✅ |
-| Scrolling capture of long pages (sticky headers/footers handled) | ✅ | ✅ | next version |
+| Scrolling capture of long pages (sticky headers/footers handled) | ✅ | ✅ | ✅ (RemoteDesktop portal; permission remembered) |
 | Screen recording to MP4 (H.264) with pause/resume | ✅ | ✅ | ✅ (PipeWire) |
 | Text extraction (OCR), offline | ✅ Windows OCR | ✅ Vision | ✅ Tesseract (Vietnamese included) |
 | Library with thumbnails, grouped by date, search | ✅ | ✅ | ✅ |
-| Global keyboard shortcuts | ✅ customizable | ✅ customizable | ✅ via system shortcuts (guided) |
+| Global keyboard shortcuts | ✅ customizable | ✅ customizable | ✅ GlobalShortcuts portal (GNOME 48+, Plasma 6); guided custom shortcuts elsewhere |
 | English and Vietnamese, switchable at any time | ✅ | ✅ | ✅ |
 | Native modern look | Windows 11 (Mica, light/dark, Fluent icons) | Liquid Glass on macOS 26 | GNOME / libadwaita, light/dark |
-| Check for updates from GitHub Releases | ✅ one-click install (SHA-256 verified) | ✅ download | ✅ notify |
+| Check for updates from GitHub Releases | ✅ one-click install (SHA-256 verified) | ✅ download | ✅ notify (.deb); Flatpak updates through Flatpak |
 
 > **Status:** the macOS and Linux versions were written without a Mac or a Linux desktop at hand. Both are built by CI on every push, and the Linux version also runs a headless self-test that renders every window — but neither has been tested by hand yet. Bug reports are very welcome.
 
@@ -40,7 +40,7 @@ Get the latest build from **[Releases](https://github.com/kingrubic/minisnap/rel
 - **Windows 10/11:** `MiniSnap-Setup.exe` — per-user install, no admin rights. The installer is not code-signed yet, so SmartScreen may warn: click *More info → Run anyway*.
 - **macOS 14+:** `MiniSnap-macOS.zip` — unzip, then right-click `MiniSnap.app` → *Open* the first time (the app is not notarized). Grant *Screen Recording* (and *Accessibility* for scrolling capture) when asked.
 - **Ubuntu 24.04+ / Debian:** `minisnap_<version>_all.deb` — `sudo apt install ./minisnap_*_all.deb` (pulls in GTK4, libadwaita, GStreamer and Tesseract).
-- **Any Linux distribution:** `MiniSnap.flatpak` — `flatpak install --user MiniSnap.flatpak` (needs the Flathub remote for the GNOME runtime). Screen access goes through the desktop portal, so the system asks for permission the first time.
+- **Any Linux distribution:** `MiniSnap.flatpak` — `flatpak install --user MiniSnap.flatpak` (needs the Flathub remote for the GNOME runtime). Screen access goes through the desktop portal, so the system asks for permission the first time. Getting MiniSnap onto Flathub: see [linux/flathub/README.md](linux/flathub/README.md).
 
 See the [Code signing policy](#code-signing-policy) and the [Privacy policy](PRIVACY.md).
 
@@ -61,12 +61,12 @@ Free code signing provided by [SignPath.io](https://signpath.io), certificate by
 | Capture region / window | `PrtScn` (also `Ctrl+Shift+X`) | `⌥⇧2` | `Ctrl+Alt+C` |
 | Capture full screen | `Ctrl+PrtScn` | `⌥⇧1` | `Ctrl+Alt+F` |
 | Capture after 3 seconds | `Shift+PrtScn` | `⌥⇧3` | — |
-| Scrolling capture | `Ctrl+Alt+S` | `⌥⇧S` | next version |
+| Scrolling capture | `Ctrl+Alt+S` | `⌥⇧S` | `Ctrl+Alt+S` |
 | Record video (start/stop) | `Ctrl+Alt+R` | `⌥⇧R` | `Ctrl+Alt+R` |
 | Capture & extract text | `Ctrl+Alt+O` | `⌥⇧O` | `Ctrl+Alt+O` |
 | Library | `Ctrl+Alt+L` | `⌥⇧L` | `Ctrl+Alt+L` |
 
-On Windows and macOS all shortcuts can be changed in **Keyboard shortcuts…** from the tray / menu-bar menu. On Linux, the same window explains how to add them as custom shortcuts in the system settings (each runs a `minisnap --capture …` command, with copy buttons).
+On Windows and macOS all shortcuts can be changed in **Keyboard shortcuts…** from the tray / menu-bar menu. On Linux, desktops with the GlobalShortcuts portal (GNOME 48+, KDE Plasma 6) register them in one click; elsewhere (for example Ubuntu 24.04 / GNOME 46) the same window explains how to add them as custom shortcuts (each runs a `minisnap --capture …` command, with copy buttons).
 
 ![Keyboard shortcuts](docs/shortcuts.png)
 
@@ -137,7 +137,7 @@ MiniSnap là phần mềm chụp màn hình **miễn phí, nguồn mở (giấy 
 - macOS: menu trên thanh menu.
 - Linux: nút menu ☰ của cửa sổ MiniSnap.
 
-**Phím tắt trên Linux:** mở menu ☰ → *Phím tắt bàn phím…* để xem hướng dẫn gán phím trong Cài đặt của Ubuntu.
+**Phím tắt trên Linux:** mở menu ☰ → *Phím tắt bàn phím…*. Trên GNOME 48 trở lên hoặc KDE Plasma 6, bấm một nút là đăng ký xong phím tắt. Trên Ubuntu 24.04, cửa sổ này hướng dẫn gán phím trong Cài đặt.
 
 **Cập nhật:** dùng *Kiểm tra cập nhật...* trong menu. App cũng tự kiểm tra mỗi ngày một lần và chỉ báo khi có bản mới.
 
