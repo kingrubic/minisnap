@@ -140,7 +140,7 @@ class ShortcutsWindow(Adw.ApplicationWindow):
         button.add_css_class("suggested-action")
         button.set_valign(Gtk.Align.CENTER)
         button.connect("clicked", self._on_configure)
-        group.set_header_suffix(button)
+        # Below the list rather than as the header suffix: there it overlapped the wrapped description.
         for sid, name, preferred in shortcut_list():
             row = Adw.ActionRow()
             row.set_use_markup(False)
@@ -153,10 +153,14 @@ class ShortcutsWindow(Adw.ApplicationWindow):
             group.add(row)
         self.portal_status = Gtk.Label(xalign=0)
         self.portal_status.set_wrap(True)
+        self.portal_status.set_hexpand(True)
         self.portal_status.add_css_class("dim-label")
         self.portal_status.add_css_class("caption")
-        self.portal_status.set_margin_top(8)
-        group.add(self.portal_status)
+        footer = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        footer.set_margin_top(10)
+        footer.append(button)
+        footer.append(self.portal_status)
+        group.add(footer)
         self._refresh_portal()
         return group
 
