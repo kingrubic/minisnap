@@ -83,6 +83,11 @@
   </requires>
 
   <releases>
+    <release version="1.7.3" date="2026-10-16">
+      <description>
+        <p>macOS: after downloading and verifying an update, MiniSnap can install it over the old app and relaunch by itself. Windows and Linux are unchanged.</p>
+      </description>
+    </release>
     <release version="1.7.2" date="2026-10-16">
       <description>
         <p>Update MiniSnap from the app: the .deb version downloads the new package, checks its SHA-256 digest and installs it after asking for your password; every version also shows the Terminal command that updates it.</p>

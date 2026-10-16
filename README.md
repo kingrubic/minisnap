@@ -29,7 +29,7 @@
 | Global keyboard shortcuts | ✅ customizable | ✅ customizable | ✅ GlobalShortcuts portal (GNOME 48+, Plasma 6); guided custom shortcuts elsewhere |
 | English and Vietnamese, switchable at any time | ✅ | ✅ | ✅ |
 | Native modern look | Windows 11 (Mica, light/dark, Fluent icons) | Liquid Glass on macOS 26 | GNOME / libadwaita, light/dark |
-| Check for updates from GitHub Releases | ✅ one-click install (SHA-256 verified) | ✅ download | ✅ one-click install for the .deb (SHA-256 verified, asks for your password); Terminal command for every install |
+| Check for updates from GitHub Releases | ✅ one-click install (SHA-256 verified) | ✅ install and relaunch (SHA-256 verified; app in a writable folder such as Applications) | ✅ one-click install for the .deb (SHA-256 verified, asks for your password); Terminal command for every install |
 
 > **Status:** the macOS and Linux versions were written without a Mac or a Linux desktop at hand. Both are built by CI on every push, and the Linux version also runs a headless self-test that renders every window — but neither has been tested by hand yet. Bug reports are very welcome.
 

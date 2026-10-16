@@ -250,6 +250,9 @@ enum L {
         "File tải về không khớp mã kiểm tra SHA-256 — đã huỷ để an toàn.": "The downloaded file does not match its SHA-256 checksum — cancelled for safety.",
         "Đã tải bản mới": "Update downloaded",
         "Finder đang hiện MiniSnap.app mới. Hãy thoát MiniSnap, rồi kéo app mới vào thư mục Applications (chọn Thay thế).": "Finder is showing the new MiniSnap.app. Quit MiniSnap, then drag the new app into your Applications folder (choose Replace).",
+        "Bản mới đã được kiểm tra mã SHA-256. MiniSnap sẽ thoát, thay app trong thư mục ": "The new version's SHA-256 checksum has been verified. MiniSnap will quit, replace the app in ",
+        " rồi tự mở lại.\n\nmacOS có thể hỏi lại quyền Ghi màn hình cho bản mới.": " and open again.\n\nmacOS may ask again for the Screen Recording permission for the new version.",
+        "Cài đặt và khởi động lại": "Install and Relaunch",
         "Có bản MiniSnap mới": "A new MiniSnap version is available",
         "Chọn \"Kiểm tra cập nhật...\" trong menu để tải về.": "Choose \"Check for updates...\" in the menu to download it."
     ]

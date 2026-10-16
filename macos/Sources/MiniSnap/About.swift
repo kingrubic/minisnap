@@ -118,8 +118,9 @@ final class AboutWindow: NSObject, NSWindowDelegate {
     func windowWillClose(_ notification: Notification) { onClose?() }
 }
 
-/// Checks GitHub releases, downloads + verifies the macOS zip and reveals the new app in Finder.
-/// It never replaces the running app by itself.
+/// Checks GitHub releases and downloads + verifies the macOS zip. When the installed app can be written to
+/// (e.g. /Applications) it offers "Install and relaunch": the new app is staged beside the old one, and a
+/// detached shell swaps it in after MiniSnap quits, then opens it. Otherwise the new app is shown in Finder.
 @MainActor
 final class Updater {
     static let shared = Updater()
@@ -309,13 +310,90 @@ final class Updater {
                 }.value
                 hideProgress()
                 guard let appURL = app else { throw CaptureError.failed("MiniSnap.app not found in the download") }
-                NSWorkspace.shared.activateFileViewerSelecting([appURL])
-                Alerts.show(L.t("Đã tải bản mới"), L.t("Finder đang hiện MiniSnap.app mới. Hãy thoát MiniSnap, rồi kéo app mới vào thư mục Applications (chọn Thay thế)."), style: .informational)
+                let current = Bundle.main.bundleURL
+                guard Updater.canReplace(current) else {
+                    NSWorkspace.shared.activateFileViewerSelecting([appURL])
+                    Alerts.show(L.t("Đã tải bản mới"), L.t("Finder đang hiện MiniSnap.app mới. Hãy thoát MiniSnap, rồi kéo app mới vào thư mục Applications (chọn Thay thế)."), style: .informational)
+                    return
+                }
+                let alert = NSAlert()
+                alert.messageText = L.t("Đã tải bản mới")
+                alert.informativeText = L.t("Bản mới đã được kiểm tra mã SHA-256. MiniSnap sẽ thoát, thay app trong thư mục ") + current.deletingLastPathComponent().path + L.t(" rồi tự mở lại.\n\nmacOS có thể hỏi lại quyền Ghi màn hình cho bản mới.")
+                alert.alertStyle = .informational
+                alert.addButton(withTitle: L.t("Cài đặt và khởi động lại"))
+                alert.addButton(withTitle: L.t("Để sau"))
+                NSApp.activate(ignoringOtherApps: true)
+                guard alert.runModal() == .alertFirstButtonReturn else { return }
+                // Copy the new app next to the old one first: any failure here leaves the installed app untouched.
+                let staged = try await Task.detached(priority: .userInitiated) { () throws -> URL in
+                    try Updater.stage(appURL, nextTo: current)
+                }.value
+                try Updater.swapAfterExit(staged: staged, over: current)
+                NSApp.terminate(nil)
             } catch {
                 hideProgress()
                 Alerts.show(L.t("Không tải được bản cập nhật"), error.localizedDescription)
             }
         }
+    }
+
+    /// The running app can be replaced in place: a real .app bundle in a folder we may write to, and not
+    /// one that macOS runs from a read-only disk image or a translocated (quarantined) copy.
+    nonisolated static func canReplace(_ bundle: URL) -> Bool {
+        let path = bundle.standardizedFileURL.path
+        guard bundle.pathExtension == "app", !path.hasPrefix("/Volumes/"), !path.contains("/AppTranslocation/") else { return false }
+        let fm = FileManager.default
+        return fm.isWritableFile(atPath: bundle.deletingLastPathComponent().path) && fm.isWritableFile(atPath: path)
+    }
+
+    /// Copies the downloaded app beside the installed one (same volume, so the later swap is a rename).
+    nonisolated static func stage(_ newApp: URL, nextTo current: URL) throws -> URL {
+        let staged = current.deletingLastPathComponent().appendingPathComponent("." + current.lastPathComponent + ".update")
+        let fm = FileManager.default
+        if fm.fileExists(atPath: staged.path) { try fm.removeItem(at: staged) }
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: "/usr/bin/ditto")
+        p.arguments = [newApp.path, staged.path]
+        try p.run()
+        p.waitUntilExit()
+        if p.terminationStatus != 0 {
+            try? fm.removeItem(at: staged)
+            throw CaptureError.failed("ditto exit code " + String(p.terminationStatus))
+        }
+        // Downloads made by URLSession carry no quarantine flag, but a copy from elsewhere might.
+        let x = Process()
+        x.executableURL = URL(fileURLWithPath: "/usr/bin/xattr")
+        x.arguments = ["-dr", "com.apple.quarantine", staged.path]
+        x.standardError = FileHandle.nullDevice
+        try? x.run()
+        x.waitUntilExit()
+        return staged
+    }
+
+    /// Starts a detached shell that waits for this process to quit, swaps the staged app in (the old one is
+    /// put back if the swap fails) and opens MiniSnap again. Paths are passed as arguments, never inside the script.
+    static func swapAfterExit(staged: URL, over current: URL) throws {
+        let script = """
+        pid="$1"; new="$2"; old="$3"; backup="$old.old-$$"
+        i=0
+        while kill -0 "$pid" 2>/dev/null; do
+          sleep 0.2; i=$((i+1))
+          if [ "$i" -ge 300 ]; then rm -rf "$new"; exit 1; fi
+        done
+        if mv "$old" "$backup"; then
+          if mv "$new" "$old"; then rm -rf "$backup"; else mv "$backup" "$old"; rm -rf "$new"; fi
+        else
+          rm -rf "$new"
+        fi
+        /usr/bin/open "$old"
+        """
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: "/bin/sh")
+        p.arguments = ["-c", script, "minisnap-update", String(ProcessInfo.processInfo.processIdentifier), staged.path, current.path]
+        p.standardInput = FileHandle.nullDevice
+        p.standardOutput = FileHandle.nullDevice
+        p.standardError = FileHandle.nullDevice
+        try p.run()
     }
 
     nonisolated static func findApp(in dir: URL) -> URL? {
