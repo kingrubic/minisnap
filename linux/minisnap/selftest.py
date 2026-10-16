@@ -13,13 +13,15 @@ import ast
 import os
 import random
 import shutil
+import subprocess
 import sys
 import tempfile
 import threading
 import time
 import traceback
 
-WINDOW_KINDS = ("launcher", "editor", "overlay", "library", "about", "shortcuts", "shortcuts-portal", "scroll-status")
+WINDOW_KINDS = ("launcher", "editor", "overlay", "library", "about", "shortcuts", "shortcuts-portal", "scroll-status",
+                "update")
 
 
 def run(outdir):
@@ -108,6 +110,21 @@ def text_image(text, w=900, h=160):
     PangoCairo.show_layout(cr, layout)
     s.flush()
     return s
+
+
+def sample_release_json(version):
+    """A GitHub "latest release" answer for a made-up version (no network involved)."""
+    tag = "v%d.%d.%d" % tuple(version)
+    v = tag[1:]
+    base = "https://github.com/kingrubic/minisnap/releases/download/%s/" % tag
+    assets = [("minisnap_%s_all.deb" % v, 80000), ("MiniSnap.flatpak", 4700000), ("MiniSnap-Setup.exe", 331000)]
+    return {
+        "tag_name": tag, "name": tag, "html_url": "https://github.com/kingrubic/minisnap/releases/tag/" + tag,
+        "body": "## What's new\r\n* Screenshots on **GNOME** work again\r\n- Update from the app\r\n\r\n\r\n"
+                "**Full Changelog**: https://github.com/kingrubic/minisnap/compare/v1.0.0...v9.9.9",
+        "assets": [{"name": n, "browser_download_url": base + n, "size": s, "digest": "sha256:" + "ab" * 32}
+                   for n, s in assets],
+    }
 
 
 def sample_shapes():
@@ -791,7 +808,69 @@ class Runner:
             raise RuntimeError("is_newer(+1 minor, same, older) = %s" % (result,))
         if updater.parse_version("v2.0-beta") != (2, 0, 0) or updater.parse_version("garbage") is not None:
             raise RuntimeError("parse_version")
-        detail = "current=%s" % updater.version_text(cur)
+
+        # Release parsing, notes, how to update each kind of installation.
+        r = updater.release_from_json(sample_release_json((cur[0], cur[1] + 1, 0)))
+        deb = updater.asset_for(r, "deb")
+        if not updater.is_newer(r) or deb is None or not deb["name"].endswith("_all.deb") \
+                or updater.asset_for(r, "flatpak")["name"] != "MiniSnap.flatpak":
+            raise RuntimeError("release_from_json / asset_for: %s" % [a["name"] for a in r.assets])
+        notes = updater.clean_notes(r.notes)
+        if notes != ("What's new\n• Screenshots on GNOME work again\n• Update from the app\n\n"
+                     "Full Changelog: https://github.com/kingrubic/minisnap/compare/v1.0.0...v9.9.9"):
+            raise RuntimeError("clean_notes -> %r" % notes)
+        cmd = updater.terminal_command(r, "deb")
+        if cmd != "wget -qO /tmp/minisnap.deb %s && sudo apt install -y /tmp/minisnap.deb" % deb["url"]:
+            raise RuntimeError("deb command %r" % cmd)
+        fu = updater.terminal_command(r, "flatpak", flatpak_user=True)
+        fs = updater.terminal_command(r, "flatpak", flatpak_user=False)
+        if "flatpak install -y --user --reinstall /tmp/MiniSnap.flatpak" not in fu or "--system" not in fs:
+            raise RuntimeError("flatpak commands %r / %r" % (fu, fs))
+        g = updater.terminal_command(r, "git", here="/home/u/src/minisnap/linux/minisnap")
+        if g != "git -C /home/u/src/minisnap pull" or updater.terminal_command(r, "other") is not None:
+            raise RuntimeError("git command %r" % g)
+        if updater.install_kind(here=updater.DEB_LOCATION) != "deb" \
+                or updater.install_kind(here="/nonexistent/a/b") != "other":
+            raise RuntimeError("install_kind")
+        folder = tempfile.mkdtemp(prefix="minisnap-update-")
+        try:
+            info = os.path.join(folder, "flatpak-info")
+            with open(info, "w", encoding="utf-8") as f:
+                f.write("[Application]\nname=io.github.kingrubic.MiniSnap\n\n[Instance]\n"
+                        "app-path=/home/u/.local/share/flatpak/app/io.github.kingrubic.MiniSnap/x86_64/master/abc/files\n")
+            if not updater.flatpak_user_install(info) or updater.flatpak_user_install(os.path.join(folder, "none")):
+                raise RuntimeError("flatpak_user_install")
+            if updater.expected_sha256(deb) != "ab" * 32 or updater.expected_sha256({"digest": "md5:12"}) is not None:
+                raise RuntimeError("expected_sha256")
+            blob = os.path.join(folder, "blob")
+            with open(blob, "wb") as f:
+                f.write(b"MiniSnap" * 10000)
+            import hashlib
+            if updater.sha256_of(blob) != hashlib.sha256(b"MiniSnap" * 10000).hexdigest():
+                raise RuntimeError("sha256_of")
+            if updater.install_argv("/x/m.deb") != ["pkexec", "/usr/bin/apt-get", "install", "-y", "/x/m.deb"]:
+                raise RuntimeError("install_argv")
+            checked = "dpkg-deb missing"
+            if shutil.which("dpkg-deb"):
+                pkg = os.path.join(folder, "pkg")
+                os.makedirs(os.path.join(pkg, "DEBIAN"))
+                with open(os.path.join(pkg, "DEBIAN", "control"), "w", encoding="utf-8") as f:
+                    f.write("Package: minisnap\nVersion: 9.8.7\nArchitecture: all\nMaintainer: Test <t@example.com>\n"
+                            "Description: test\n")
+                built = os.path.join(folder, "m.deb")
+                subprocess.run(["dpkg-deb", "--build", "--root-owner-group", pkg, built], check=True,
+                               capture_output=True)
+                updater.check_deb(built, (9, 8, 7))
+                try:
+                    updater.check_deb(built, (9, 8, 8))
+                except RuntimeError:
+                    pass
+                else:
+                    raise RuntimeError("check_deb accepted the wrong version")
+                checked = "check_deb ok"
+        finally:
+            shutil.rmtree(folder, ignore_errors=True)
+        detail = "current=%s, %s" % (updater.version_text(cur), checked)
         if os.environ.get("MINISNAP_SELFTEST_NETWORK") == "1":
             try:
                 r = updater.fetch()
@@ -993,6 +1072,15 @@ class Runner:
             win = ScrollStatusWindow(app, None)
             win.update(7, 4210)
             delay = 500
+        elif kind == "update":
+            # A made-up newer release, as the .deb installation sees it (no network is used).
+            from . import updater
+            cur = updater.CURRENT
+            release = updater.release_from_json(sample_release_json((cur[0], cur[1] + 1, 0)))
+            win = updater.UpdateWindow(app, release, kind="deb", has_pkexec=True)
+            if not win.update_btn.get_visible() or not win.cmd_box.get_visible():
+                raise RuntimeError("update window without Update now / Terminal command")
+            delay = 600
         else:
             raise ValueError(kind)
         holder["window"] = win

@@ -320,6 +320,28 @@ EN = {
     "\nHãy tải bản mới cho Linux trên trang GitHub.": "\nDownload the new Linux version from the GitHub page.",
     "Xem trên GitHub": "View on GitHub",
     "Để sau": "Later",
+    "Cập nhật ngay": "Update now",
+    "\nBấm Cập nhật ngay: MiniSnap tải bản mới, kiểm tra mã SHA-256 rồi cài đặt (hệ thống sẽ hỏi mật khẩu của bạn).":
+        "\nClick Update now: MiniSnap downloads the new version, checks its SHA-256 digest and installs it "
+        "(your system will ask for your password).",
+    "Hoặc cập nhật bằng Terminal:": "Or update from a Terminal:",
+    "Cập nhật bằng lệnh Terminal:": "Update with this Terminal command:",
+    "Đang tải ": "Downloading ",
+    "Đã kiểm tra mã SHA-256. Đang cài đặt — hãy nhập mật khẩu khi hệ thống hỏi…":
+        "SHA-256 digest checked. Installing — enter your password when the system asks…",
+    "Chưa được cấp quyền cài đặt (hộp thoại mật khẩu bị đóng).":
+        "Permission to install was not given (the password dialog was closed).",
+    "apt-get báo lỗi:\n": "apt-get reported an error:\n",
+    "Đã cập nhật lên ": "Updated to ",
+    "Khởi động lại MiniSnap để dùng bản mới.": "Restart MiniSnap to use the new version.",
+    "Khởi động lại MiniSnap": "Restart MiniSnap",
+    "\nBạn có thể dùng lệnh Terminal bên dưới.": "\nYou can use the Terminal command below instead.",
+    "Không cập nhật được: ": "Couldn't update: ",
+    "GitHub không cung cấp mã SHA-256 cho tệp này nên MiniSnap không tự cài.":
+        "GitHub publishes no SHA-256 digest for this file, so MiniSnap won't install it by itself.",
+    "Tệp tải về không khớp mã SHA-256 của GitHub, đã huỷ cài đặt.":
+        "The download doesn't match GitHub's SHA-256 digest; the update was cancelled.",
+    "Gói tải về không phải MiniSnap ": "The downloaded package is not MiniSnap ",
     "Có bản MiniSnap mới: ": "New MiniSnap version: ",
     "Tự kiểm tra cập nhật hằng ngày": "Check for updates daily",
     "Tự kiểm tra bản mới mỗi ngày (chỉ gửi một yêu cầu tới api.github.com — xem PRIVACY.md)":

@@ -133,8 +133,22 @@ jobs:
           path: dist
       - name: Flathub manifest for this tag
         run: bash linux/packaging/make-flathub-manifest.sh "${{ github.ref_name }}" dist/io.github.kingrubic.MiniSnap.yml
+      - name: Release notes from the AppStream metadata
+        run: |
+          python3 - "${GITHUB_REF_NAME#v}" > dist/release-notes.md <<'EOF'
+          import sys
+          import xml.etree.ElementTree as ET
+          root = ET.parse("linux/data/io.github.kingrubic.MiniSnap.metainfo.xml").getroot()
+          for rel in root.iter("release"):
+              if rel.get("version") == sys.argv[1]:
+                  for p in rel.iter("p"):
+                      print(" ".join((p.text or "").split()))
+                      print()
+          EOF
+          cat dist/release-notes.md
       - uses: softprops/action-gh-release@v2
         with:
+          body_path: dist/release-notes.md
           generate_release_notes: true
           fail_on_unmatched_files: false
           files: |

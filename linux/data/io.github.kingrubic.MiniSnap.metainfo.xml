@@ -83,6 +83,11 @@
   </requires>
 
   <releases>
+    <release version="1.7.2" date="2026-10-16">
+      <description>
+        <p>Update MiniSnap from the app: the .deb version downloads the new package, checks its SHA-256 digest and installs it after asking for your password; every version also shows the Terminal command that updates it.</p>
+      </description>
+    </release>
     <release version="1.7.1" date="2026-10-16">
       <description>
         <p>Screenshots on GNOME (Ubuntu 24.04) no longer fail with "response 2": MiniSnap identifies itself to the portal, falls back to the system screenshot tool when a silent capture is refused, and can ask for the screenshot permission again.</p>
