@@ -56,6 +56,40 @@ def map_monitors(geoms, shot_w, shot_h):
     return out, (ox, oy, sx, sy)
 
 
+def display_monitors():
+    """[(Gdk.Monitor, (x, y, w, h) logical)] of the default display."""
+    mons = []
+    display = Gdk.Display.get_default()
+    model = display.get_monitors() if display is not None else None
+    n = model.get_n_items() if model is not None else 0
+    for i in range(n):
+        m = model.get_item(i)
+        g = m.get_geometry()
+        mons.append((m, (g.x, g.y, g.width, g.height)))
+    return mons
+
+
+def monitors_matching(geoms, shot_w, shot_h):
+    """Which monitors an image from the desktop's own screenshot UI shows, judged by its shape: the
+    indices of all monitors (the whole desktop), of one monitor ("Screen" on a multi-monitor desktop),
+    or None (a window or an area, which is a finished capture rather than a backdrop for the overlay)."""
+    def fits(w, h):
+        if w <= 0 or h <= 0:
+            return False
+        sx, sy = shot_w / float(w), shot_h / float(h)
+        return sx >= 0.99 and abs(sx - sy) <= 0.01 * sx
+    if not geoms:
+        return None
+    ox = min(g[0] for g in geoms)
+    oy = min(g[1] for g in geoms)
+    if fits(max(g[0] + g[2] for g in geoms) - ox, max(g[1] + g[3] for g in geoms) - oy):
+        return list(range(len(geoms)))
+    for i, g in enumerate(geoms):
+        if fits(g[2], g[3]):
+            return [i]
+    return None
+
+
 def rect_intersect(a, b):
     x1, y1 = max(a[0], b[0]), max(a[1], b[1])
     x2, y2 = min(a[0] + a[2], b[0] + b[2]), min(a[1] + a[3], b[1] + b[3])
@@ -91,16 +125,7 @@ class CaptureOverlay:
         cr.paint()
         self.dim.flush()
 
-        display = Gdk.Display.get_default()
-        mons = monitors
-        if mons is None:
-            mons = []
-            model = display.get_monitors() if display is not None else None
-            n = model.get_n_items() if model is not None else 0
-            for i in range(n):
-                m = model.get_item(i)
-                g = m.get_geometry()
-                mons.append((m, (g.x, g.y, g.width, g.height)))
+        mons = monitors if monitors is not None else display_monitors()
         mapping, self.info = map_monitors([g for (_m, g) in mons], self.w, self.h)
         self.views = []
         for i, (logical, pixel) in enumerate(mapping):

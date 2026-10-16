@@ -2,7 +2,7 @@ name: Build
 
 on:
   push:
-    branches: [main, macos, linux, linux-phase2]
+    branches: [main, macos, linux, linux-phase2, 'fix-*']
     tags: ['v*']
   pull_request:
   workflow_dispatch:

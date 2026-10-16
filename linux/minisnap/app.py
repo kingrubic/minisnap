@@ -513,8 +513,15 @@ class MiniSnapApp(Adw.Application):
     def _grab(self, mode, delay):
         if delay > 0:
             self.withdraw_notification("delay")
-        capture.take_screenshot(False, lambda surface, error: self._on_shot(mode, surface, error))
+        capture.take_screenshot(False, lambda surface, error, used_ui: self._on_shot(mode, surface, error, used_ui),
+                                on_fallback=self._notify_fallback)
         return False
+
+    def _notify_fallback(self):
+        """The desktop refused the silent grab, so its own screenshot UI opens instead."""
+        n = Gio.Notification.new("MiniSnap")
+        n.set_body(L.t("Hệ thống không cho MiniSnap chụp tự động nên đã mở công cụ chụp màn hình của hệ thống. Hãy chọn “Màn hình” rồi bấm nút chụp, sau đó chọn vùng trong MiniSnap như bình thường."))
+        self.send_notification("fallback", n)
 
     def _end_capture(self, cancelled):
         self.busy = False
@@ -524,20 +531,40 @@ class MiniSnapApp(Adw.Application):
         self._reopen_launcher = False
         self._release()
 
-    def _on_shot(self, mode, surface, error):
+    def _on_shot(self, mode, surface, error, used_ui=False):
         if surface is None:
             if error:
-                capture.show_error(self, error)
+                capture.show_error(self, error, retry=lambda: self.begin_capture(mode))
             self._end_capture(cancelled=True)
             return
         if mode == "full":
             self.save_and_edit(surface)
             self._end_capture(cancelled=False)
             return
-        from .overlay import CaptureOverlay
+        from .overlay import CaptureOverlay, display_monitors, monitors_matching
+        mons = None
+        if used_ui:
+            # The image came from the desktop's screenshot UI: the whole desktop or one screen is a
+            # backdrop for our overlay as usual; a window or an area already is the capture.
+            all_mons = display_monitors()
+            w, h = render.size(surface)
+            picked = monitors_matching([g for (_m, g) in all_mons], w, h)
+            if picked is None:
+                if mode in ("video", "scroll"):
+                    capture.show_message(self, L.t("Hãy chọn “Màn hình” trong công cụ chụp của hệ thống"),
+                                         L.t("Để chọn vùng quay video hoặc chụp cuộn, hãy chọn chế độ “Màn hình” (không chọn Vùng hay Cửa sổ) trong công cụ chụp màn hình của hệ thống, rồi bấm nút chụp."))
+                    self._end_capture(cancelled=True)
+                    return
+                if mode == "ocr":
+                    self.show_ocr(surface)
+                else:
+                    self.save_and_edit(surface)
+                self._end_capture(cancelled=False)
+                return
+            mons = [all_mons[i] for i in picked]
         ask = mode == "region" and bool(settings.get("ask_after_select"))
         self.overlay = CaptureOverlay(self, surface, lambda result: self._on_overlay(mode, surface, result),
-                                      prompt=self._prompt(mode), ask_mode=ask)
+                                      prompt=self._prompt(mode), ask_mode=ask, monitors=mons)
         ox, oy, sx, sy = self.overlay.info
         self._total_logical = (ox, oy, surface.get_width() / sx, surface.get_height() / sy)
         self.overlay.show()
@@ -573,10 +600,10 @@ class MiniSnapApp(Adw.Application):
         self._hold()
         self._reopen_launcher = self._hide_launcher()
 
-        def got(surface, error):
+        def got(surface, error, _used_ui):
             if surface is None:
                 if error:
-                    capture.show_error(self, error)
+                    capture.show_error(self, error, retry=self.pick_window)
                 self._end_capture(cancelled=True)
                 return
             self.save_and_edit(surface)

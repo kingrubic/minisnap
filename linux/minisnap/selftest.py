@@ -1,6 +1,7 @@
 """Headless self-test: `python3 -m minisnap --selftest OUTDIR`.
 
-Runs under `xvfb-run -a -s "-screen 0 1600x1000x24"` without any portal (none is called here).
+Runs under `xvfb-run -a -s "-screen 0 1600x1000x24"` without a real portal; the screenshot step talks
+to FakePortal below, which owns made-up bus names.
 Writes OUTDIR/log.txt plus PNGs: render.png, stitch.png, scroll-session.png, and screenshots of every
 window in both languages and both colour schemes (e.g. editor-vi-dark.png, shortcuts-portal-en-light.png,
 scroll-status-vi-dark.png). Each step logs "ok" or
@@ -14,6 +15,7 @@ import random
 import shutil
 import sys
 import tempfile
+import threading
 import time
 import traceback
 
@@ -192,6 +194,101 @@ def snapshot_window(win, path):
     raise RuntimeError(last_error)
 
 
+class FakePortal:
+    """A stand-in xdg-desktop-portal served from its own thread (so the app's synchronous calls get
+    answers): host Registry.Register, Screenshot (a silent grab is refused with response 2 unless
+    allow_silent, the screenshot UI answers with a PNG, deny_all refuses everything) and the permission
+    store's DeletePermission. Every call is recorded as (sender, method, args)."""
+
+    NAME = "io.github.kingrubic.MiniSnap.SelfTest.Portal"
+    STORE_NAME = "io.github.kingrubic.MiniSnap.SelfTest.PermissionStore"
+    XML = """<node>
+  <interface name='org.freedesktop.host.portal.Registry'>
+    <method name='Register'><arg type='s' direction='in'/><arg type='a{sv}' direction='in'/></method>
+  </interface>
+  <interface name='org.freedesktop.portal.Screenshot'>
+    <method name='Screenshot'>
+      <arg type='s' direction='in'/><arg type='a{sv}' direction='in'/><arg type='o' direction='out'/>
+    </method>
+  </interface>
+  <interface name='org.freedesktop.impl.portal.PermissionStore'>
+    <method name='DeletePermission'>
+      <arg type='s' direction='in'/><arg type='s' direction='in'/><arg type='s' direction='in'/>
+    </method>
+  </interface>
+</node>"""
+
+    def __init__(self, png_path):
+        self.png = png_path
+        self.calls = []
+        self.allow_silent = False
+        self.deny_all = False
+        self.error = None
+        self.loop = None
+        self._ready = threading.Event()
+
+    def start(self):
+        self.thread = threading.Thread(target=self._run, daemon=True)
+        self.thread.start()
+        if not self._ready.wait(10):
+            raise RuntimeError("fake portal did not start")
+        if self.error:
+            raise RuntimeError("fake portal: " + self.error)
+
+    def stop(self):
+        if self.loop is not None:
+            self.loop.quit()
+            self.thread.join(10)
+
+    def _run(self):
+        from . import _gi  # noqa: F401
+        from gi.repository import Gio, GLib
+        from . import portal
+        ctx = GLib.MainContext.new()
+        ctx.push_thread_default()
+        try:
+            address = Gio.dbus_address_get_for_bus_sync(Gio.BusType.SESSION, None)
+            conn = Gio.DBusConnection.new_for_address_sync(
+                address, Gio.DBusConnectionFlags.AUTHENTICATION_CLIENT | Gio.DBusConnectionFlags.MESSAGE_BUS_CONNECTION,
+                None, None)
+            for iface in Gio.DBusNodeInfo.new_for_xml(self.XML).interfaces:
+                path = portal.PERMISSION_STORE_PATH if iface.name == portal.PERMISSION_STORE_IFACE else portal.OBJECT_PATH
+                conn.register_object(path, iface, self._on_call, None, None)
+            for name in (self.NAME, self.STORE_NAME):
+                ret = conn.call_sync("org.freedesktop.DBus", "/org/freedesktop/DBus", "org.freedesktop.DBus",
+                                     "RequestName", GLib.Variant("(su)", (name, 4)), GLib.VariantType.new("(u)"),
+                                     Gio.DBusCallFlags.NONE, 5000, None)
+                if ret.unpack()[0] != 1:
+                    raise RuntimeError("could not own " + name)
+            self.loop = GLib.MainLoop.new(ctx, False)
+        except Exception as e:  # noqa: BLE001
+            self.error = str(e)
+            self._ready.set()
+            return
+        self._ready.set()
+        self.loop.run()
+        conn.close_sync(None)
+        ctx.pop_thread_default()
+
+    def _on_call(self, conn, sender, path, iface, method, params, invocation):
+        from gi.repository import GLib
+        from . import portal
+        args = params.unpack()
+        self.calls.append((sender, method, args))
+        if method != "Screenshot":
+            invocation.return_value(None)
+            return
+        options = args[1]
+        request = "%s/request/%s/%s" % (portal.OBJECT_PATH, sender.lstrip(":").replace(".", "_"),
+                                        options.get("handle_token", "t"))
+        invocation.return_value(GLib.Variant("(o)", (request,)))
+        if self.deny_all or not (options.get("interactive") or self.allow_silent):
+            code, results = 2, {}
+        else:
+            code, results = 0, {"uri": GLib.Variant("s", GLib.filename_to_uri(self.png, None))}
+        conn.emit_signal(sender, request, portal.REQUEST_IFACE, "Response", GLib.Variant("(ua{sv})", (code, results)))
+
+
 class Runner:
     def __init__(self, app, outdir):
         self.app = app
@@ -228,6 +325,7 @@ class Runner:
             ("scroll session", self.test_scroll_session),
             ("scroll portal plumbing", self.test_scroll_plumbing),
             ("global shortcuts model", self.test_global_shortcuts),
+            ("screenshot portal fallback", self.test_screenshot_portal),
             ("monitor mapping", self.test_mapping),
             ("record crop", self.test_crop),
             ("updater compare", self.test_updater),
@@ -550,6 +648,112 @@ class Runner:
         if pretty_trigger("CTRL+ALT+c") != "Ctrl+Alt+C" or pretty_trigger("LOGO+SHIFT+F5") != "Super+Shift+F5":
             raise RuntimeError("pretty_trigger")
         return "%d shortcuts, signature %s" % (v.n_children(), p.get_type_string())
+
+    def test_screenshot_portal(self):
+        """Registry first, a refused silent grab falls back to the screenshot UI (once per run), refusals
+        are told apart from failed calls, and the stored answer can be deleted."""
+        import cairo
+        from gi.repository import Gio
+        from . import capture, portal
+        from .overlay import monitors_matching
+
+        one = [(0, 0, 1600, 1000)]
+        two = [(0, 0, 1920, 1080), (1920, 0, 1280, 1024)]
+        for geoms, w, h, want in ((one, 1600, 1000, [0]), (one, 3200, 2000, [0]), (one, 800, 600, None),
+                                  (one, 1600, 900, None), (two, 3200, 1080, [0, 1]), (two, 2560, 2048, [1]),
+                                  (two, 1920, 1080, [0]), (two, 640, 480, None)):
+            got = monitors_matching(geoms, w, h)
+            if got != want:
+                raise RuntimeError("monitors_matching(%s, %d, %d) = %s, expected %s" % (geoms, w, h, got, want))
+
+        folder = tempfile.mkdtemp(prefix="minisnap-portal-")
+        png = os.path.join(folder, "fake-portal.png")
+        img = cairo.ImageSurface(cairo.FORMAT_ARGB32, 64, 40)
+        cr = cairo.Context(img)
+        cr.set_source_rgb(0.2, 0.5, 0.9)
+        cr.paint()
+        img.write_to_png(png)
+        saved = (portal.BUS_NAME, portal.PERMISSION_STORE_NAME)
+        fake = FakePortal(png)
+        fake.start()
+        portal.BUS_NAME, portal.PERMISSION_STORE_NAME = fake.NAME, fake.STORE_NAME
+        portal.reset()
+        capture.forget_denial()
+        fallbacks = []
+        try:
+            surface, error, ui = self._portal_shot(capture, False, fallbacks)
+            methods = [(c[1], c[2][1].get("interactive") if c[1] == "Screenshot" else c[2][0]) for c in fake.calls]
+            if methods != [("Register", portal.APP_ID), ("Screenshot", False), ("Screenshot", True)]:
+                raise RuntimeError("portal calls %s" % methods)
+            if len({c[0] for c in fake.calls}) != 1 or not portal.registered:
+                raise RuntimeError("calls not all on the registered connection: %s" % [c[0] for c in fake.calls])
+            shared = Gio.bus_get_sync(Gio.BusType.SESSION, None).get_unique_name()
+            if fake.calls[0][0] == shared:
+                raise RuntimeError("registered on the shared connection")
+            if surface is None or (surface.get_width(), surface.get_height()) != (64, 40) or not ui or error:
+                raise RuntimeError("fallback result %s %s %s" % (surface, error, ui))
+            if fallbacks != [1]:
+                raise RuntimeError("fallback notices %s" % fallbacks)
+
+            # Later captures in this run go straight to the screenshot UI, without a new notice.
+            surface, error, ui = self._portal_shot(capture, False, fallbacks)
+            if surface is None or not ui or fake.calls[-1][2][1].get("interactive") is not True or len(fake.calls) != 4:
+                raise RuntimeError("second capture: %s %s, calls %d" % (surface, ui, len(fake.calls)))
+            if fallbacks != [1]:
+                raise RuntimeError("fallback notices %s" % fallbacks)
+
+            fake.deny_all = True
+            surface, error, ui = self._portal_shot(capture, True, fallbacks)
+            if surface is not None or not isinstance(error, capture.Denied):
+                raise RuntimeError("refusal reported as %r" % (error,))
+
+            if not portal.reset_screenshot_permission():
+                raise RuntimeError("DeletePermission failed")
+            if fake.calls[-1][1:] != ("DeletePermission", ("screenshot", "screenshot", portal.APP_ID)):
+                raise RuntimeError("permission reset call %s" % (fake.calls[-1][1:],))
+
+            # After the reset (and an "Allow") the silent grab works again.
+            capture.forget_denial()
+            fake.deny_all = False
+            fake.allow_silent = True
+            surface, error, ui = self._portal_shot(capture, False, fallbacks)
+            if surface is None or ui or fake.calls[-1][2][1].get("interactive") is not False:
+                raise RuntimeError("silent grab after reset: %s %s" % (surface, ui))
+
+            # A portal that is not there is an error, not a refusal, and no screenshot UI is tried.
+            portal.BUS_NAME = "io.github.kingrubic.MiniSnap.SelfTest.Nobody"
+            portal.reset()
+            n = len(fake.calls)
+            surface, error, ui = self._portal_shot(capture, False, fallbacks)
+            if surface is not None or not error or isinstance(error, capture.Denied) or portal.registered:
+                raise RuntimeError("missing portal reported as %r (registered %s)" % (error, portal.registered))
+            if len(fake.calls) != n or fallbacks != [1]:
+                raise RuntimeError("missing portal: %d calls, notices %s" % (len(fake.calls) - n, fallbacks))
+        finally:
+            portal.BUS_NAME, portal.PERMISSION_STORE_NAME = saved
+            portal.reset()
+            capture.forget_denial()
+            fake.stop()
+            shutil.rmtree(folder, ignore_errors=True)
+        return "%d portal calls, registered connection, fallback and permission reset" % len(fake.calls)
+
+    @staticmethod
+    def _portal_shot(capture, interactive, fallbacks, timeout=15):
+        from gi.repository import GLib
+        box = []
+        capture.take_screenshot(interactive, lambda s, e, ui: box.append((s, e, ui)),
+                                on_fallback=lambda: fallbacks.append(1))
+        tick = GLib.timeout_add(100, lambda: True)
+        ctx = GLib.MainContext.default()
+        deadline = time.time() + timeout
+        try:
+            while not box and time.time() < deadline:
+                ctx.iteration(True)
+        finally:
+            GLib.source_remove(tick)
+        if not box:
+            raise RuntimeError("no answer from the fake portal")
+        return box[0]
 
     def test_mapping(self):
         from .overlay import map_monitors

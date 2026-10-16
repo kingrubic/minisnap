@@ -89,6 +89,21 @@ EN = {
     "MiniSnap chụp màn hình qua xdg-desktop-portal. Hãy kiểm tra gói xdg-desktop-portal và xdg-desktop-portal-gnome (hoặc -kde, -wlr) đã được cài, rồi thử lại.":
         "MiniSnap takes screenshots through xdg-desktop-portal. Make sure the xdg-desktop-portal and "
         "xdg-desktop-portal-gnome (or -kde, -wlr) packages are installed, then try again.",
+    "Hệ thống đã từ chối cho MiniSnap chụp màn hình. Thường là do trước đây đã chọn “Từ chối” ở hộp thoại hỏi quyền chụp màn hình.":
+        "Your system refused to let MiniSnap take a screenshot. This usually means “Deny” was chosen "
+        "earlier when the system asked for screenshot permission.",
+    "Bấm “Hỏi lại quyền” để xoá lựa chọn cũ, rồi chọn “Cho phép” khi hệ thống hỏi.":
+        "Click “Ask again” to forget that answer, then choose “Allow” when the system asks.",
+    "Hãy cấp lại quyền chụp màn hình cho MiniSnap bằng lệnh:":
+        "Give MiniSnap screenshot permission again with this command:",
+    "Hỏi lại quyền": "Ask again",
+    "Hệ thống không cho MiniSnap chụp tự động nên đã mở công cụ chụp màn hình của hệ thống. Hãy chọn “Màn hình” rồi bấm nút chụp, sau đó chọn vùng trong MiniSnap như bình thường.":
+        "Your system doesn't let MiniSnap capture on its own, so its screenshot tool opened instead. "
+        "Choose “Screen” and press the capture button, then select an area in MiniSnap as usual.",
+    "Hãy chọn “Màn hình” trong công cụ chụp của hệ thống": "Choose “Screen” in the system screenshot tool",
+    "Để chọn vùng quay video hoặc chụp cuộn, hãy chọn chế độ “Màn hình” (không chọn Vùng hay Cửa sổ) trong công cụ chụp màn hình của hệ thống, rồi bấm nút chụp.":
+        "To pick the area for a recording or a scrolling capture, choose “Screen” (not Selection or Window) "
+        "in the system screenshot tool, then press the capture button.",
 
     # Editor
     "Chọn": "Select",

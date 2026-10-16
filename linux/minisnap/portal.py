@@ -6,6 +6,12 @@ org.freedesktop.portal.Request::Response signal. We subscribe to the predicted r
 (built from our unique bus name and a handle_token) *before* calling, so the answer can't be
 missed, and re-subscribe if an old portal returns a different path.
 Response codes: 0 = success, 1 = cancelled by the user, 2 = other error.
+
+Outside Flatpak the portal cannot tell which app is calling. Where it offers the host Registry
+(xdg-desktop-portal 1.19+, and Ubuntu 24.04's 1.18 backport) MiniSnap registers its app id first, on
+a private connection of its own: the registration must be the connection's first portal call, and
+GTK has already used the shared connection. The portal then asks the user about "MiniSnap" instead
+of refusing an app with no id (GNOME 46 answers a silent screenshot from one with response 2).
 """
 
 import itertools
@@ -14,8 +20,14 @@ import os
 from . import _gi  # noqa: F401
 from gi.repository import Gio, GLib
 
+from . import APP_ID, paths
+
 BUS_NAME = "org.freedesktop.portal.Desktop"
 OBJECT_PATH = "/org/freedesktop/portal/desktop"
+REGISTRY_IFACE = "org.freedesktop.host.portal.Registry"
+PERMISSION_STORE_NAME = "org.freedesktop.impl.portal.PermissionStore"
+PERMISSION_STORE_PATH = "/org/freedesktop/impl/portal/PermissionStore"
+PERMISSION_STORE_IFACE = "org.freedesktop.impl.portal.PermissionStore"
 REQUEST_IFACE = "org.freedesktop.portal.Request"
 SCREENSHOT_IFACE = "org.freedesktop.portal.Screenshot"
 SCREENCAST_IFACE = "org.freedesktop.portal.ScreenCast"
@@ -34,6 +46,8 @@ DEVICE_POINTER = 2
 PERSIST_UNTIL_REVOKED = 2
 
 _counter = itertools.count(1)
+_conn = None
+registered = False      # the portal knows us as APP_ID (host Registry)
 
 
 class PortalError(Exception):
@@ -41,14 +55,59 @@ class PortalError(Exception):
 
 
 def _bus():
+    global _conn
+    if _conn is not None and not _conn.is_closed():
+        return _conn
     try:
-        return Gio.bus_get_sync(Gio.BusType.SESSION, None)
+        shared = Gio.bus_get_sync(Gio.BusType.SESSION, None)
     except GLib.Error as e:
         raise PortalError(e.message)
+    _conn = _registered_connection() or shared
+    return _conn
+
+
+def _registered_connection():
+    """A private session-bus connection registered as APP_ID, or None (Flatpak, which identifies the app
+    itself, or a portal without the host Registry)."""
+    global registered
+    registered = False
+    if paths.in_flatpak():
+        return None
+    try:
+        address = Gio.dbus_address_get_for_bus_sync(Gio.BusType.SESSION, None)
+        conn = Gio.DBusConnection.new_for_address_sync(
+            address, Gio.DBusConnectionFlags.AUTHENTICATION_CLIENT | Gio.DBusConnectionFlags.MESSAGE_BUS_CONNECTION,
+            None, None)
+    except GLib.Error:
+        return None
+    try:
+        conn.call_sync(BUS_NAME, OBJECT_PATH, REGISTRY_IFACE, "Register",
+                       GLib.Variant("(sa{sv})", (APP_ID, {})), None, Gio.DBusCallFlags.NONE, 5000, None)
+    except GLib.Error:
+        try:
+            conn.close_sync(None)
+        except GLib.Error:
+            pass
+        return None
+    registered = True
+    return conn
+
+
+def reset():
+    """Forgets the portal connection; the next call connects (and registers) again. Used by the self-test."""
+    global _conn, registered
+    # Only the private connection is ours to close; closing the shared one would end the app.
+    if _conn is not None and registered:
+        try:
+            _conn.close_sync(None)
+        except GLib.Error:
+            pass
+    _conn = None
+    registered = False
 
 
 def bus():
-    """The session bus; raises PortalError when there is none."""
+    """The portal connection (registered as APP_ID when possible); raises PortalError without a session bus."""
     return _bus()
 
 
@@ -165,11 +224,12 @@ Request = _Request
 # ---------- Screenshot ----------
 
 def screenshot(interactive, callback):
-    """Asks the portal for a screenshot. callback(uri, error): uri None + error None = cancelled."""
+    """Asks the portal for a screenshot. callback(uri, error, denied): uri None + error None = cancelled;
+    denied = the portal answered "no" (response 2), as opposed to a failed call."""
     try:
         conn = _bus()
     except PortalError as e:
-        GLib.idle_add(lambda: (callback(None, str(e)), False)[1])
+        GLib.idle_add(lambda: (callback(None, str(e), False), False)[1])
         return
     token = new_token()
     options = {
@@ -180,13 +240,32 @@ def screenshot(interactive, callback):
 
     def done(code, results):
         if code == 0 and results.get("uri"):
-            callback(results["uri"], None)
+            callback(results["uri"], None, False)
         elif code == 1:
-            callback(None, None)
+            callback(None, None, False)
         else:
-            callback(None, results.get("error") or "xdg-desktop-portal Screenshot: response %d" % code)
+            # _Request puts "error" in the results only when the call itself failed.
+            callback(None, results.get("error") or "xdg-desktop-portal Screenshot: response %d" % code,
+                     code == 2 and "error" not in results)
 
     _Request(conn, SCREENSHOT_IFACE, "Screenshot", GLib.Variant("(sa{sv})", ("", options)), token, done)
+
+
+def reset_screenshot_permission():
+    """Deletes the stored answer to the portal's "Allow … to take screenshots?" question for this app
+    (APP_ID once registered, else the empty id of unidentified host apps), so the portal asks again.
+    True when an entry was removed. Not possible from inside Flatpak (no access to the permission store)."""
+    try:
+        conn = Gio.bus_get_sync(Gio.BusType.SESSION, None)
+    except GLib.Error:
+        return False
+    try:
+        conn.call_sync(PERMISSION_STORE_NAME, PERMISSION_STORE_PATH, PERMISSION_STORE_IFACE, "DeletePermission",
+                       GLib.Variant("(sss)", ("screenshot", "screenshot", APP_ID if registered else "")),
+                       None, Gio.DBusCallFlags.NONE, 3000, None)
+    except GLib.Error:
+        return False
+    return True
 
 
 # ---------- ScreenCast ----------
