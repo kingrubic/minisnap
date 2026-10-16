@@ -16,7 +16,11 @@ from .i18n import L
 
 
 def launcher_command():
-    """`minisnap` when installed on PATH, else the absolute path of linux/bin/minisnap."""
+    """`minisnap` when installed on PATH, else the absolute path of linux/bin/minisnap.
+
+    Inside Flatpak the shortcut runs on the host, so it must go through `flatpak run`."""
+    if os.environ.get("FLATPAK_ID") or os.path.exists("/.flatpak-info"):
+        return "flatpak run " + os.environ.get("FLATPAK_ID", "io.github.kingrubic.MiniSnap")
     if shutil.which("minisnap"):
         return "minisnap"
     here = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "bin", "minisnap")

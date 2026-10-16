@@ -30,7 +30,9 @@ modules:
   # Tesseract OCR is not part of the GNOME runtime.
   - name: leptonica
     buildsystem: cmake-ninja
+    builddir: true
     config-opts:
+      - -DCMAKE_POLICY_VERSION_MINIMUM=3.5
       - -DCMAKE_BUILD_TYPE=Release
       - -DBUILD_SHARED_LIBS=ON
       - -DSW_BUILD=OFF
@@ -42,7 +44,9 @@ modules:
 
   - name: tesseract
     buildsystem: cmake-ninja
+    builddir: true
     config-opts:
+      - -DCMAKE_POLICY_VERSION_MINIMUM=3.5
       - -DCMAKE_BUILD_TYPE=Release
       - -DBUILD_SHARED_LIBS=ON
       - -DBUILD_TRAINING_TOOLS=OFF
