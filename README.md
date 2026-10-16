@@ -90,7 +90,7 @@ On Windows and macOS all shortcuts can be changed in **Keyboard shortcuts…** f
   ```
   See [linux/README.md](linux/README.md) for the apt packages to install first.
 
-GitHub Actions builds everything on every push (and runs the Linux self-test); pushing a tag like `v1.5.1` publishes a release with all downloads.
+GitHub Actions builds everything on every push (and runs the Linux self-test); pushing a tag like `v1.6.0` publishes a release with all downloads.
 
 ## Project layout
 

@@ -59,7 +59,7 @@
   </supports>
 
   <releases>
-    <release version="1.5.1" date="2026-10-16">
+    <release version="1.6.0" date="2026-10-16">
       <description>
         <p>First Linux version: region, window and full-screen capture through xdg-desktop-portal, annotation editor, screen recording, text extraction and the image &amp; video library.</p>
       </description>
